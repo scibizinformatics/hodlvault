@@ -15,23 +15,30 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
+    "@bitauth/libauth": "^3.1.0-next.8",
     "@quasar/extras": "^1.16.4",
+    "@walletconnect/modal": "^2.7.0",
+    "@walletconnect/sign-client": "^2.23.6",
+    "@walletconnect/utils": "^2.23.6",
+    "cashscript": "^0.12.1",
+    "qrcode.vue": "^3.8.0",
     "quasar": "^2.16.0",
     "vue": "^3.5.22",
-    "vue-router": "^5.0.0"
+    "vue-router": "^5.0.0",
+    "vuex": "^4.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",
+    "@quasar/app-vite": "^2.1.0",
+    "@vue/eslint-config-prettier": "^10.1.0",
+    "autoprefixer": "^10.4.2",
     "eslint": "^9.14.0",
     "eslint-plugin-vue": "^10.4.0",
     "globals": "^16.4.0",
-    "vite-plugin-checker": "^0.11.0",
-    "vue-eslint-parser": "^10.2.0",
-    "@vue/eslint-config-prettier": "^10.1.0",
+    "postcss": "^8.4.14",
     "prettier": "^3.3.3",
-    "@quasar/app-vite": "^2.1.0",
-    "autoprefixer": "^10.4.2",
-    "postcss": "^8.4.14"
+    "vite-plugin-checker": "^0.11.0",
+    "vue-eslint-parser": "^10.2.0"
   },
   "engines": {
     "node": "^28 || ^26 || ^24 || ^22 || ^20",

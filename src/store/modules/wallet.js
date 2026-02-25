@@ -15,6 +15,9 @@ const mutations = {
     state.publicKey = payload.publicKey ?? null
     state.privateKey = payload.privateKey ?? null
   },
+  SET_PUBLIC_KEY(state, publicKey) {
+    state.publicKey = publicKey ?? null
+  },
   CLEAR_WALLET(state) {
     state.address = null
     state.publicKey = null

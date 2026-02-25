@@ -56,7 +56,7 @@
             v-if="hasWallet && hasPublicKey"
             type="submit"
             color="primary"
-            label="Lock Funds"
+            label="LOCK FUNDS"
             :loading="locking"
             :disable="!canLockFunds"
             icon="lock"
@@ -66,8 +66,16 @@
               <template v-slot:avatar>
                 <q-icon name="info" />
               </template>
-              Public key not available. Click "Connect Wallet" again to fetch it from Paytaca.
+              Public key not available. Verify your identity to continue.
               <template v-slot:action>
+                <q-btn
+                  flat
+                  color="primary"
+                  label="VERIFY IDENTITY"
+                  :loading="verifyingIdentity"
+                  :disable="verifyingIdentity"
+                  @click="onVerifyIdentity"
+                />
                 <q-btn flat label="Go to Home" @click="goToHome" />
               </template>
             </q-banner>
@@ -173,6 +181,7 @@ export default defineComponent({
         priceTarget: null,
       },
       locking: false,
+      verifyingIdentity: false,
       withdrawing: false,
       vault: null,
       priceLoading: false,
@@ -331,6 +340,32 @@ export default defineComponent({
         })
       } finally {
         this.locking = false
+      }
+    },
+
+    async onVerifyIdentity() {
+      if (this.hasPublicKey) return
+      const wc = this.$walletConnect
+      if (!wc || typeof wc.recoverPublicKey !== 'function') {
+        this.$q.notify({ type: 'negative', message: 'WalletConnect not initialized' })
+        return
+      }
+
+      this.verifyingIdentity = true
+      try {
+        await wc.recoverPublicKey()
+        this.$q.notify({
+          type: 'positive',
+          message: 'Identity verified',
+          icon: 'check_circle',
+        })
+      } catch (err) {
+        this.$q.notify({
+          type: 'negative',
+          message: err?.message || 'Failed to verify identity',
+        })
+      } finally {
+        this.verifyingIdentity = false
       }
     },
 

@@ -1,5 +1,5 @@
 /**
- * WalletConnect Boot File (v1.6.3)
+ * WalletConnect Boot File (v1.7.1)
  * Real Paytaca connectivity via WalletConnect v2 Sign Client + Modal.
  * Using Paytaca-compatible chain IDs: bch:bchtest (testnet) and bch:bitcoincash (mainnet).
  * Reference: https://github.com/mainnet-pat/wc2-bch-bcr
@@ -8,6 +8,7 @@
 import { boot } from 'quasar/wrappers'
 import SignClient from '@walletconnect/sign-client'
 import { WalletConnectModal } from '@walletconnect/modal'
+import { base64ToBin, binToHex, secp256k1, sha256 } from '@bitauth/libauth'
 
 // Paytaca/WalletConnect v2 BCH chain IDs (wc2-bch-bcr spec)
 // bch:bchtest = testnet, bch:bitcoincash = mainnet, bch:bchreg = regtest
@@ -44,6 +45,115 @@ if (PROJECT_ID === 'YOUR_REOWN_PROJECT_ID') {
 let signClient = null
 let modal = null
 let currentSession = null
+
+const BITCOIN_SIGNED_MESSAGE_PREFIX = (() => {
+  const encoder = new TextEncoder()
+  const text = encoder.encode('Bitcoin Signed Message:\n')
+  const out = new Uint8Array(1 + text.length)
+  out[0] = 0x18
+  out.set(text, 1)
+  return out
+})()
+
+function encodeBitcoinVarInt(n) {
+  if (n < 0xfd) return Uint8Array.from([n])
+  if (n <= 0xffff) return Uint8Array.from([0xfd, n & 0xff, (n >>> 8) & 0xff])
+  if (n <= 0xffffffff) {
+    return Uint8Array.from([
+      0xfe,
+      n & 0xff,
+      (n >>> 8) & 0xff,
+      (n >>> 16) & 0xff,
+      (n >>> 24) & 0xff,
+    ])
+  }
+  throw new Error('Message too long')
+}
+
+function concatBytes(...parts) {
+  const total = parts.reduce((sum, p) => sum + p.length, 0)
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const p of parts) {
+    out.set(p, offset)
+    offset += p.length
+  }
+  return out
+}
+
+function hash256(payload) {
+  return sha256.hash(sha256.hash(payload))
+}
+
+function hashBitcoinSignedMessage(message) {
+  const encoder = new TextEncoder()
+  const msg = encoder.encode(message)
+  const preimage = concatBytes(
+    BITCOIN_SIGNED_MESSAGE_PREFIX,
+    encodeBitcoinVarInt(msg.length),
+    msg
+  )
+  return hash256(preimage)
+}
+
+export async function recoverPublicKey(store) {
+  if (!store) throw new Error('Vuex store not available')
+
+  const client = await getSignClient()
+  if (!currentSession?.topic) {
+    throw new Error('Wallet not connected. Connect Paytaca first.')
+  }
+
+  const chainId = currentSession.namespaces?.bch?.chains?.[0] ?? BCH_TESTNET_CHAIN
+  const message = 'Login to HodlVault'
+
+  const signatureBase64 = await client.request({
+    chainId,
+    topic: currentSession.topic,
+    request: { method: 'bch_signMessage', params: { message, userPrompt: message } },
+  })
+
+  if (!signatureBase64 || typeof signatureBase64 !== 'string') {
+    throw new Error('Wallet did not return a message signature')
+  }
+
+  const sigBin = base64ToBin(signatureBase64)
+  if (sigBin.length !== 65) {
+    throw new Error(`Unexpected signature length: ${sigBin.length}`)
+  }
+
+  const header = sigBin[0]
+  if (header < 27 || header > 35) {
+    throw new Error(`Unexpected signature header: ${header}`)
+  }
+
+  let recoveryId = header - 27
+  const compressed = recoveryId >= 4
+  if (compressed) recoveryId -= 4
+
+  const compactSig = sigBin.slice(1) // 64 bytes: r||s
+  const messageHash = hashBitcoinSignedMessage(message)
+
+  let pubKey = compressed
+    ? secp256k1.recoverPublicKeyCompressed(compactSig, recoveryId, messageHash)
+    : secp256k1.recoverPublicKeyUncompressed(compactSig, recoveryId, messageHash)
+
+  if (typeof pubKey === 'string') throw new Error(pubKey)
+
+  if (!compressed) {
+    const compressedPub = secp256k1.compressPublicKey(pubKey)
+    if (typeof compressedPub === 'string') throw new Error(compressedPub)
+    pubKey = compressedPub
+  }
+
+  if (!secp256k1.validatePublicKey(pubKey)) {
+    throw new Error('Recovered public key is invalid')
+  }
+
+  const publicKeyHex = binToHex(pubKey)
+  store.commit('wallet/SET_PUBLIC_KEY', publicKeyHex)
+  return publicKeyHex
+}
 
 async function getSignClient() {
   if (signClient) return signClient
@@ -169,6 +279,10 @@ export function initializeWalletConnect(store) {
         topic: currentSession.topic,
         request: { method, params },
       })
+    },
+
+    async recoverPublicKey() {
+      return await recoverPublicKey(store)
     },
   }
 }

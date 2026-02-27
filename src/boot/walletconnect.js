@@ -1,5 +1,5 @@
 /**
- * WalletConnect Boot File (v1.7.1)
+* WalletConnect Boot File (v1.7.2)
  * Real Paytaca connectivity via WalletConnect v2 Sign Client + Modal.
  * Using Paytaca-compatible chain IDs: bch:bchtest (testnet) and bch:bitcoincash (mainnet).
  * Reference: https://github.com/mainnet-pat/wc2-bch-bcr
@@ -8,7 +8,7 @@
 import { boot } from 'quasar/wrappers'
 import SignClient from '@walletconnect/sign-client'
 import { WalletConnectModal } from '@walletconnect/modal'
-import { base64ToBin, binToHex, secp256k1, sha256 } from '@bitauth/libauth'
+import { base64ToBin, binToHex, hexToBin, secp256k1, sha256 } from '@bitauth/libauth'
 
 // Paytaca/WalletConnect v2 BCH chain IDs (wc2-bch-bcr spec)
 // bch:bchtest = testnet, bch:bitcoincash = mainnet, bch:bchreg = regtest
@@ -96,6 +96,23 @@ function hashBitcoinSignedMessage(message) {
   return hash256(preimage)
 }
 
+function isHexString(value) {
+  return typeof value === 'string' && /^[0-9a-fA-F]+$/.test(value)
+}
+
+function tryExtractCompactSignature(buffer) {
+  if (buffer.length === 65 && buffer[0] >= 27 && buffer[0] <= 35) {
+    return buffer
+  }
+  for (let i = 0; i <= buffer.length - 65; i++) {
+    const header = buffer[i]
+    if (header >= 27 && header <= 35) {
+      return buffer.slice(i, i + 65)
+    }
+  }
+  return null
+}
+
 export async function recoverPublicKey(store) {
   if (!store) throw new Error('Vuex store not available')
 
@@ -107,22 +124,35 @@ export async function recoverPublicKey(store) {
   const chainId = currentSession.namespaces?.bch?.chains?.[0] ?? BCH_TESTNET_CHAIN
   const message = 'Login to HodlVault'
 
-  const signatureBase64 = await client.request({
+  const signatureResponse = await client.request({
     chainId,
     topic: currentSession.topic,
     request: { method: 'bch_signMessage', params: { message, userPrompt: message } },
   })
 
-  if (!signatureBase64 || typeof signatureBase64 !== 'string') {
+  console.log('Raw Paytaca Signature:', signatureResponse)
+
+  if (!signatureResponse) {
     throw new Error('Wallet did not return a message signature')
   }
 
-  const sigBin = base64ToBin(signatureBase64)
-  if (sigBin.length !== 65) {
-    throw new Error(`Unexpected signature length: ${sigBin.length}`)
+  const rawString = typeof signatureResponse === 'string'
+    ? signatureResponse.trim()
+    : JSON.stringify(signatureResponse)
+
+  let decoded = base64ToBin(rawString)
+  let sigWithHeader = tryExtractCompactSignature(decoded)
+
+  if (!sigWithHeader && isHexString(rawString) && rawString.length % 2 === 0) {
+    const hexDecoded = hexToBin(rawString)
+    sigWithHeader = tryExtractCompactSignature(hexDecoded)
   }
 
-  const header = sigBin[0]
+  if (!sigWithHeader) {
+    throw new Error(`Unable to locate compact signature in payload (decoded length: ${decoded.length})`)
+  }
+
+  const header = sigWithHeader[0]
   if (header < 27 || header > 35) {
     throw new Error(`Unexpected signature header: ${header}`)
   }
@@ -131,7 +161,7 @@ export async function recoverPublicKey(store) {
   const compressed = recoveryId >= 4
   if (compressed) recoveryId -= 4
 
-  const compactSig = sigBin.slice(1) // 64 bytes: r||s
+  const compactSig = sigWithHeader.slice(1) // 64 bytes: r||s
   const messageHash = hashBitcoinSignedMessage(message)
 
   let pubKey = compressed

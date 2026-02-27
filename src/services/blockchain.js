@@ -181,6 +181,44 @@ export async function spendVault(contract, {
 }
 
 /**
+ * Request a standard BCH payment to the vault address using WalletConnect.
+ * @param {string} toAddress - Vault contract address (CashAddr)
+ * @param {number|bigint} amountSats - Amount to send in satoshis
+ * @param {function} walletConnectRequest - (method, params) => Promise<any>
+ * @returns {Promise<any>} WalletConnect bch_sendTransaction result
+ */
+export async function depositToVault(toAddress, amountSats, walletConnectRequest) {
+  if (typeof walletConnectRequest !== 'function') {
+    throw new Error('WalletConnect request function is required to deposit to vault')
+  }
+
+  if (!toAddress) {
+    throw new Error('Vault address is required')
+  }
+
+  const value = typeof amountSats === 'bigint' ? amountSats : BigInt(amountSats)
+  if (value <= 0n) {
+    throw new Error('Deposit amount must be greater than zero')
+  }
+
+  const payload = serializeForWc({
+    recipientCashaddress: toAddress,
+    valueSatoshis: value,
+    broadcast: true,
+    userPrompt: 'Lock funds into HodlVault',
+  })
+
+  try {
+    const result = await walletConnectRequest('bch_sendTransaction', payload)
+    return result
+  } catch {
+    // Fallback for wallets that only implement bch_signTransaction with broadcast support
+    const fallbackResult = await walletConnectRequest('bch_signTransaction', payload)
+    return fallbackResult
+  }
+}
+
+/**
  * Simulate a spend transaction (for test/demo mode)
  * Waits 2 seconds and returns a fake transaction ID
  * @param {Contract} contract - Contract instance (for logging purposes)

@@ -1,6 +1,6 @@
 <template>
   <q-page class="flex flex-center column q-pa-md">
-    <div class="text-h5 q-mb-md">BCH HodlVault v1.7.2</div>
+    <div class="text-h5 q-mb-md">BCH HodlVault v1.8.1</div>
 
     <!-- Connect Paytaca (WalletConnect) -->
     <q-card flat bordered class="wallet-card q-pa-lg">

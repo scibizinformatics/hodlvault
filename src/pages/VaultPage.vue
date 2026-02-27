@@ -57,7 +57,7 @@
             type="submit"
             color="primary"
             label="LOCK FUNDS"
-            :loading="locking"
+            :loading="locking || depositing"
             :disable="!canLockFunds"
             icon="lock"
           />
@@ -88,6 +88,14 @@
             @click="goToHome"
           />
         </q-form>
+        <div v-if="depositing" class="q-mt-sm">
+          <q-banner class="bg-info text-white">
+            <template v-slot:avatar>
+              <q-spinner-dots color="white" size="24px" />
+            </template>
+            Waiting for Deposit... Confirm the payment in your wallet.
+          </q-banner>
+        </div>
       </q-card-section>
     </q-card>
 
@@ -167,6 +175,7 @@ import {
   initializeHodlVaultContract,
   getContractBalance,
   spendVault,
+  depositToVault,
 } from 'src/services/blockchain'
 import { fetchOraclePrice } from 'src/services/oracle'
 import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
@@ -181,6 +190,7 @@ export default defineComponent({
         priceTarget: null,
       },
       locking: false,
+      depositing: false,
       verifyingIdentity: false,
       withdrawing: false,
       vault: null,
@@ -291,6 +301,14 @@ export default defineComponent({
 
     async onLockFunds() {
       if (!this.canLockFunds) return
+      const wc = this.$walletConnect
+      if (!wc || !wc.isConnected || !wc.isConnected()) {
+        this.$q.notify({
+          type: 'negative',
+          message: 'Please connect your wallet first',
+        })
+        return
+      }
 
       this.locking = true
       try {
@@ -333,6 +351,37 @@ export default defineComponent({
 
         console.log('Vault created. Contract address:', contractAddress)
         console.log('To lock funds, send', this.form.amount, 'satoshis to:', contractAddress)
+
+        // Immediately request a deposit from the connected wallet
+        if (typeof wc.request === 'function') {
+          this.depositing = true
+          try {
+            await depositToVault(
+              contractAddress,
+              this.form.amount,
+              (method, params) => wc.request(method, params)
+            )
+            this.$q.notify({
+              type: 'positive',
+              message: 'Deposit transaction requested in your wallet',
+              icon: 'check_circle',
+            })
+          } catch (depositErr) {
+            this.$q.notify({
+              type: 'negative',
+              message:
+                depositErr?.message ||
+                'Deposit rejected by wallet. Please ensure you have enough funds for the amount + gas fee.',
+            })
+          } finally {
+            this.depositing = false
+          }
+        } else {
+          this.$q.notify({
+            type: 'warning',
+            message: 'WalletConnect request function is not available; please send funds manually.',
+          })
+        }
       } catch (err) {
         this.$q.notify({
           type: 'negative',

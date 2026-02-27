@@ -1,5 +1,5 @@
 /**
-* WalletConnect Boot File (v1.7.2)
+* WalletConnect Boot File (v1.8.1)
  * Real Paytaca connectivity via WalletConnect v2 Sign Client + Modal.
  * Using Paytaca-compatible chain IDs: bch:bchtest (testnet) and bch:bitcoincash (mainnet).
  * Reference: https://github.com/mainnet-pat/wc2-bch-bcr
@@ -19,7 +19,16 @@ const BCH_MAINNET_CHAIN = 'bch:bitcoincash'
 const REQUIRED_NAMESPACES = {
   bch: {
     chains: [BCH_TESTNET_CHAIN, BCH_MAINNET_CHAIN],
-    methods: ['bch_getAddresses', 'bch_signTransaction', 'bch_signMessage'],
+    methods: ['bch_getAddresses', 'bch_signTransaction', 'bch_sendTransaction', 'bch_signMessage'],
+    events: ['addressesChanged'],
+  },
+}
+
+// Optional namespaces for wallets that support additional BCH methods
+const OPTIONAL_NAMESPACES = {
+  bch: {
+    chains: [BCH_TESTNET_CHAIN, BCH_MAINNET_CHAIN],
+    methods: ['bch_sendTransaction', 'bch_signTransaction', 'bch_signMessage'],
     events: ['addressesChanged'],
   },
 }
@@ -210,7 +219,8 @@ export function initializeWalletConnect(store) {
   return {
     async connect() {
       if (!store) return null
-      try {
+      const timeoutMs = 10000
+      const connectFlow = async () => {
         const client = await getSignClient()
 
         const existingSessions = client.session.getAll()
@@ -238,6 +248,7 @@ export function initializeWalletConnect(store) {
         // Use requiredNamespaces as per wc2-bch-bcr spec (Paytaca expects this format)
         const { uri, approval } = await client.connect({
           requiredNamespaces: REQUIRED_NAMESPACES,
+          optionalNamespaces: OPTIONAL_NAMESPACES,
         })
 
         const wcModal = getModal()
@@ -251,9 +262,27 @@ export function initializeWalletConnect(store) {
 
         await syncSessionToStore(store, client, session)
         return store.state.wallet?.address ?? null
+      }
+
+      try {
+        const result = await Promise.race([
+          connectFlow(),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error('WalletConnect connection timed out. Please try again.')),
+              timeoutMs
+            )
+          ),
+        ])
+        return result
       } catch (err) {
         const m = getModal()
         if (m && typeof m.closeModal === 'function') m.closeModal()
+        try {
+          await this.disconnect()
+        } catch {
+          // ignore disconnect errors during recovery
+        }
         // Enhanced error logging for debugging
         console.error('WalletConnect connection error:', {
           message: err?.message,

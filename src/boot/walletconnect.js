@@ -1,5 +1,5 @@
 /**
-* WalletConnect Boot File (v1.8.1)
+* WalletConnect Boot File (v2.1.0)
  * Real Paytaca connectivity via WalletConnect v2 Sign Client + Modal.
  * Using Paytaca-compatible chain IDs: bch:bchtest (testnet) and bch:bitcoincash (mainnet).
  * Reference: https://github.com/mainnet-pat/wc2-bch-bcr
@@ -11,15 +11,18 @@ import { WalletConnectModal } from '@walletconnect/modal'
 import { base64ToBin, binToHex, hexToBin, secp256k1, sha256 } from '@bitauth/libauth'
 
 // Paytaca/WalletConnect v2 BCH chain IDs (wc2-bch-bcr spec)
-// bch:bchtest = testnet, bch:bitcoincash = mainnet, bch:bchreg = regtest
+// bch:bchtest = testnet3, bch:chipnet = chipnet, bch:bitcoincash = mainnet, bch:bchreg = regtest
 const BCH_TESTNET_CHAIN = 'bch:bchtest'
+const BCH_CHIPNET_CHAIN = 'bch:chipnet'
 const BCH_MAINNET_CHAIN = 'bch:bitcoincash'
 
 /** BCH config for WalletConnect v2 (matches wc2-bch-bcr spec for Paytaca compatibility) */
+const REQUIRED_METHODS = ['bch_getAddresses', 'bch_signTransaction', 'bch_signMessage']
+
 const REQUIRED_NAMESPACES = {
   bch: {
-    chains: [BCH_TESTNET_CHAIN, BCH_MAINNET_CHAIN],
-    methods: ['bch_getAddresses', 'bch_signTransaction', 'bch_sendTransaction', 'bch_signMessage'],
+    chains: [BCH_TESTNET_CHAIN, BCH_CHIPNET_CHAIN, BCH_MAINNET_CHAIN],
+    methods: REQUIRED_METHODS,
     events: ['addressesChanged'],
   },
 }
@@ -27,8 +30,8 @@ const REQUIRED_NAMESPACES = {
 // Optional namespaces for wallets that support additional BCH methods
 const OPTIONAL_NAMESPACES = {
   bch: {
-    chains: [BCH_TESTNET_CHAIN, BCH_MAINNET_CHAIN],
-    methods: ['bch_sendTransaction', 'bch_signTransaction', 'bch_signMessage'],
+    chains: [BCH_TESTNET_CHAIN, BCH_CHIPNET_CHAIN, BCH_MAINNET_CHAIN],
+    methods: REQUIRED_METHODS,
     events: ['addressesChanged'],
   },
 }
@@ -130,7 +133,7 @@ export async function recoverPublicKey(store) {
     throw new Error('Wallet not connected. Connect Paytaca first.')
   }
 
-  const chainId = currentSession.namespaces?.bch?.chains?.[0] ?? BCH_TESTNET_CHAIN
+  const chainId = currentSession.namespaces?.bch?.chains?.[0] ?? BCH_CHIPNET_CHAIN
   const message = 'Login to HodlVault'
 
   const signatureResponse = await client.request({
@@ -208,7 +211,7 @@ function getModal() {
   // Modal chains must match namespace chains for Paytaca compatibility
   modal = new WalletConnectModal({
     projectId: PROJECT_ID,
-    chains: [BCH_TESTNET_CHAIN, BCH_MAINNET_CHAIN],
+    chains: [BCH_TESTNET_CHAIN, BCH_CHIPNET_CHAIN, BCH_MAINNET_CHAIN],
     themeMode: 'light',
     themeVariables: { '--wcm-z-index': '9999' },
   })
@@ -228,9 +231,19 @@ export function initializeWalletConnect(store) {
           (s) => s.namespaces?.bch?.accounts?.length
         )
         if (bchSession) {
-          currentSession = bchSession
-          await syncSessionToStore(store, client, bchSession)
-          return store.state.wallet?.address ?? null
+          const methods = bchSession.namespaces?.bch?.methods ?? []
+          const hasRequiredMethods = REQUIRED_METHODS.every((m) => methods.includes(m))
+          if (!hasRequiredMethods) {
+            try {
+              await client.disconnect({ topic: bchSession.topic })
+            } catch {
+              // ignore disconnect errors for stale sessions
+            }
+          } else {
+            currentSession = bchSession
+            await syncSessionToStore(store, client, bchSession)
+            return store.state.wallet?.address ?? null
+          }
         }
 
         // Delete old pairings to prevent "Old Session" conflicts
@@ -327,12 +340,16 @@ export function initializeWalletConnect(store) {
       return currentSession?.topic ?? null
     },
 
+    getChainId() {
+      return currentSession?.namespaces?.bch?.chains?.[0] ?? null
+    },
+
     async request(method, params) {
       const client = await getSignClient()
       if (!currentSession?.topic) {
         throw new Error('Wallet not connected. Connect Paytaca first.')
       }
-      const chainId = currentSession.namespaces?.bch?.chains?.[0] ?? BCH_TESTNET_CHAIN
+      const chainId = currentSession.namespaces?.bch?.chains?.[0] ?? BCH_CHIPNET_CHAIN
       return await client.request({
         chainId,
         topic: currentSession.topic,

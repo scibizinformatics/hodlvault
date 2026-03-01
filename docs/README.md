@@ -1,17 +1,31 @@
-# BCH HodlVault Project
+# HodlVault (BCH Chipnet)
 
-## Technology Stack
-- **Frontend:** Quasar Framework (Vue 3, Options API, SCSS, Vite).
-- **Smart Contracts:** CashScript (Bitcoin Cash Covenants).
-- **Cryptography:** @bitauth/libauth.
-- **Connection:** WalletConnect.
-- **Backend/Oracle:** Django (Python) for price signing.
+HodlVault is a decentralized price-locking application built for the Bitcoin Cash ecosystem. It allows users to lock their BCH until the market value meets their expectations.
 
-## Folder Structure
-- `/src/contract`: `.cash` smart contract files.
-- `/src/services`: JavaScript logic for keys and blockchain interaction.
-- `/src/pages`: Vue components for the UI.
-- `/docs`: Project context and roadmaps.
+## Tech Stack
 
-## Setup
-Current state: Quasar project initialized with Vite and Options API. Vuex 4, CashScript, and Libauth are installed.
+- **Framework:** Vue.js (using **Options API**)
+- **Blockchain:** Bitcoin Cash (BCH)
+- **Network:** Chipnet (Testnet)
+- **Wallet Provider:** Paytaca SDK
+- **Oracle Interface:** Price Feed API (via WebSocket for live updates)
+- **Styling:** Responsive CSS (Mobile-first approach)
+
+## Getting Started
+
+1. **Clone the repo:** `git clone [repo-url]`
+2. **Install Dependencies:** `npm install`
+3. **Environment Setup:** Create a `.env` file and set `VUE_APP_NETWORK=chipnet`.
+4. **Run Development Server:** `npm run serve`
+
+## Key Functionalities
+
+- **Live Vault Monitoring:** Real-time updates on transaction status and current BCH price.
+- **Paytaca Integration:** Direct interaction with Paytaca for secure HODLing.
+- **Responsive Design:** Fully functional across desktop, tablets, and mobile devices.
+
+## Development Standards
+
+- All components must be written using the **Options API**.
+- Code must pass `eslint` checks before every commit.
+- No manual refreshes: Use reactive observers or WebSockets for live status updates.

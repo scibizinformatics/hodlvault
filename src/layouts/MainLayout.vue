@@ -2,45 +2,44 @@
   <q-layout view="lHh Lpr lFf">
     <q-header elevated>
       <q-toolbar>
-        <q-btn flat dense round icon="menu" aria-label="Menu" @click="toggleLeftDrawer" />
+        <q-toolbar-title>BCH HodlVault v2.1.0</q-toolbar-title>
 
-        <q-toolbar-title>BCH HodlVault v1.8.1</q-toolbar-title>
+        <div class="row items-center q-gutter-sm">
+          <div class="text-caption q-mr-md">Quasar v{{ $q.version }}</div>
 
-        <div>Quasar v{{ $q.version }}</div>
+          <template v-if="connectedAddress">
+            <q-chip color="positive" text-color="white" icon="check_circle">
+              Connected
+            </q-chip>
+            <q-input
+              :model-value="connectedAddress"
+              readonly
+              outlined
+              dense
+              class="monospace"
+              input-class="text-select"
+              style="max-width: 320px"
+            />
+            <q-btn
+              flat
+              dense
+              color="negative"
+              label="Disconnect"
+              @click="onDisconnectWallet"
+            />
+          </template>
+          <template v-else>
+            <q-btn
+              color="primary"
+              label="Connect Wallet"
+              :loading="connecting"
+              @click="onConnectWallet"
+              icon="account_balance_wallet"
+            />
+          </template>
+        </div>
       </q-toolbar>
     </q-header>
-
-    <q-drawer v-model="leftDrawerOpen" show-if-above bordered>
-      <q-list>
-        <q-item-label header> Navigation </q-item-label>
-
-        <q-item clickable v-ripple to="/" exact>
-          <q-item-section avatar>
-            <q-icon name="home" />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>Home</q-item-label>
-            <q-item-label caption>Wallet & Generate</q-item-label>
-          </q-item-section>
-        </q-item>
-
-        <q-item clickable v-ripple to="/vault">
-          <q-item-section avatar>
-            <q-icon name="account_balance" />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>Vault</q-item-label>
-            <q-item-label caption>Create & Manage</q-item-label>
-          </q-item-section>
-        </q-item>
-
-        <q-separator spaced />
-
-        <q-item-label header> Essential Links </q-item-label>
-
-        <EssentialLink v-for="link in linksList" :key="link.title" v-bind="link" />
-      </q-list>
-    </q-drawer>
 
     <q-page-container>
       <router-view />
@@ -50,70 +49,54 @@
 
 <script>
 import { defineComponent } from 'vue'
-import EssentialLink from 'components/EssentialLink.vue'
-
-const linksList = [
-  {
-    title: 'Docs',
-    caption: 'quasar.dev',
-    icon: 'school',
-    link: 'https://quasar.dev',
-  },
-  {
-    title: 'Github',
-    caption: 'github.com/quasarframework',
-    icon: 'code',
-    link: 'https://github.com/quasarframework',
-  },
-  {
-    title: 'Discord Chat Channel',
-    caption: 'chat.quasar.dev',
-    icon: 'chat',
-    link: 'https://chat.quasar.dev',
-  },
-  {
-    title: 'Forum',
-    caption: 'forum.quasar.dev',
-    icon: 'record_voice_over',
-    link: 'https://forum.quasar.dev',
-  },
-  {
-    title: 'Twitter',
-    caption: '@quasarframework',
-    icon: 'rss_feed',
-    link: 'https://twitter.quasar.dev',
-  },
-  {
-    title: 'Facebook',
-    caption: '@QuasarFramework',
-    icon: 'public',
-    link: 'https://facebook.quasar.dev',
-  },
-  {
-    title: 'Quasar Awesome',
-    caption: 'Community Quasar projects',
-    icon: 'favorite',
-    link: 'https://awesome.quasar.dev',
-  },
-]
 
 export default defineComponent({
   name: 'MainLayout',
 
-  components: {
-    EssentialLink,
-  },
-
   data() {
     return {
-      linksList,
-      leftDrawerOpen: false,
+      connecting: false,
     }
   },
 
+  computed: {
+    connectedAddress() {
+      return this.$store.state.wallet?.address ?? null
+    },
+  },
+
   methods: {
-    toggleLeftDrawer() {
-      this.leftDrawerOpen = !this.leftDrawerOpen
+    async onConnectWallet() {
+      this.connecting = true
+      try {
+        if (!this.$walletConnect) {
+          throw new Error('WalletConnect not initialized')
+        }
+        await this.$walletConnect.connect()
+        this.$q.notify({
+          type: 'positive',
+          message: 'Connected to Paytaca',
+          icon: 'check_circle',
+        })
+      } catch (err) {
+        this.$q.notify({
+          type: 'negative',
+          message: err && err.message ? err.message : 'Failed to connect wallet',
+        })
+      } finally {
+        this.connecting = false
+      }
+    },
+
+    onDisconnectWallet() {
+      this.$store.dispatch('wallet/clearWallet')
+      if (this.$walletConnect) {
+        this.$walletConnect.disconnect()
+      }
+      this.$q.notify({
+        type: 'info',
+        message: 'Wallet disconnected',
+      })
     },
   },
 })

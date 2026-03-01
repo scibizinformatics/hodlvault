@@ -26,10 +26,39 @@ function serializeForWc(obj) {
   return obj
 }
 
-// Network configuration - using testnet for development
-const NETWORK = 'testnet3' // Bitcoin Cash testnet
+// Network configuration
+const DEFAULT_NETWORK = typeof import.meta !== 'undefined' && import.meta.env?.VITE_BCH_NETWORK
+  ? import.meta.env.VITE_BCH_NETWORK
+  : 'chipnet'
 
 let networkProvider = null
+const queryProviders = new Map()
+
+function getFallbackHostnames(network) {
+  if (network === 'testnet3') return ['testnet.bitcoincash.network']
+  if (network === 'chipnet') return ['chipnet.bch.ninja']
+  if (network === 'mainnet') return ['bitcoincash.network']
+  return []
+}
+
+function getQueryProvider(network, hostname) {
+  const key = `${network}|${hostname || '__default__'}`
+  if (queryProviders.has(key)) return queryProviders.get(key)
+  const provider = hostname
+    ? new ElectrumNetworkProvider(network, { hostname })
+    : new ElectrumNetworkProvider(network)
+  queryProviders.set(key, provider)
+  return provider
+}
+
+function inferNetworkFromAddress(address) {
+  if (typeof address !== 'string') return DEFAULT_NETWORK
+  const prefix = address.includes(':') ? address.split(':')[0] : null
+  if (prefix === 'bitcoincash') return 'mainnet'
+  if (prefix === 'bchtest') return 'testnet3'
+  if (prefix === 'chipnet') return 'chipnet'
+  return DEFAULT_NETWORK
+}
 
 /**
  * Get or create the network provider instance
@@ -37,9 +66,30 @@ let networkProvider = null
  */
 function getProvider() {
   if (!networkProvider) {
-    networkProvider = new ElectrumNetworkProvider(NETWORK)
+    networkProvider = new ElectrumNetworkProvider(DEFAULT_NETWORK)
   }
   return networkProvider
+}
+
+export async function getAddressBalance(address) {
+  if (!address) throw new Error('Address is required')
+
+  const network = inferNetworkFromAddress(address)
+  const hostnames = [null, ...getFallbackHostnames(network)]
+  let lastError = null
+
+  for (const hostname of hostnames) {
+    try {
+      const provider = getQueryProvider(network, hostname)
+      const utxos = await provider.getUtxos(address)
+      return utxos.reduce((sum, u) => sum + u.satoshis, 0n)
+    } catch (e) {
+      lastError = e
+    }
+  }
+
+  const message = lastError && lastError.message ? lastError.message : String(lastError)
+  throw new Error(`Failed to fetch balance from network provider: ${message}`)
 }
 
 /**
@@ -97,7 +147,7 @@ export async function calculateContractAddress(ownerPkhHex, oraclePkHex, priceTa
  */
 export async function getContractBalance(contract) {
   try {
-    return await contract.getBalance()
+    return await getAddressBalance(contract.address)
   } catch (error) {
     throw new Error(`Failed to get contract balance: ${error.message}`)
   }
@@ -182,10 +232,11 @@ export async function spendVault(contract, {
 
 /**
  * Request a standard BCH payment to the vault address using WalletConnect.
+ * Uses bch_signTransaction and broadcasts via ElectrumNetworkProvider.
  * @param {string} toAddress - Vault contract address (CashAddr)
  * @param {number|bigint} amountSats - Amount to send in satoshis
  * @param {function} walletConnectRequest - (method, params) => Promise<any>
- * @returns {Promise<any>} WalletConnect bch_sendTransaction result
+ * @returns {Promise<{ txid: string | null, raw: any }>} Normalized transaction result
  */
 export async function depositToVault(toAddress, amountSats, walletConnectRequest) {
   if (typeof walletConnectRequest !== 'function') {
@@ -196,26 +247,37 @@ export async function depositToVault(toAddress, amountSats, walletConnectRequest
     throw new Error('Vault address is required')
   }
 
-  const value = typeof amountSats === 'bigint' ? amountSats : BigInt(amountSats)
-  if (value <= 0n) {
+  const amountNumber = Number(amountSats)
+  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
     throw new Error('Deposit amount must be greater than zero')
   }
 
   const payload = serializeForWc({
     recipientCashaddress: toAddress,
-    valueSatoshis: value,
-    broadcast: true,
+    valueSatoshis: BigInt(amountNumber),
+    broadcast: false,
     userPrompt: 'Lock funds into HodlVault',
   })
 
-  try {
-    const result = await walletConnectRequest('bch_sendTransaction', payload)
-    return result
-  } catch {
-    // Fallback for wallets that only implement bch_signTransaction with broadcast support
-    const fallbackResult = await walletConnectRequest('bch_signTransaction', payload)
-    return fallbackResult
+  const result = await walletConnectRequest('bch_signTransaction', payload)
+
+  const signedHex =
+    (result && result.signedTransaction) ||
+    (result && result.hex) ||
+    (result && result.transactionHex) ||
+    (result &&
+      result.result &&
+      (result.result.signedTransaction || result.result.hex || result.result.transactionHex)) ||
+    null
+
+  if (!signedHex || typeof signedHex !== 'string') {
+    throw new Error('Wallet did not return a signed transaction')
   }
+
+  const provider = getProvider()
+  const txid = await provider.sendRawTransaction(signedHex)
+
+  return { txid, raw: result }
 }
 
 /**

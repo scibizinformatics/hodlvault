@@ -32,14 +32,14 @@
         <q-form @submit="onLockFunds" class="q-gutter-md">
           <q-input
             v-model.number="form.amount"
-            label="BCH Amount (satoshis)"
+            label="Amount to Deposit into Vault"
             type="number"
             outlined
             :rules="[
               (val) => val > 0 || 'Amount must be greater than 0',
               (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
             ]"
-            hint="Enter amount in satoshis (1 BCH = 100,000,000 satoshis)"
+            hint="This amount will be requested from your Paytaca wallet to fund the contract (in satoshis)."
           />
           <q-input
             v-model.number="form.priceTarget"
@@ -76,17 +76,12 @@
                   :disable="verifyingIdentity"
                   @click="onVerifyIdentity"
                 />
-                <q-btn flat label="Go to Home" @click="goToHome" />
               </template>
             </q-banner>
           </div>
-          <q-btn
-            v-else
-            color="grey-7"
-            label="Connect Wallet First"
-            icon="account_balance_wallet"
-            @click="goToHome"
-          />
+          <div v-else class="q-mt-md text-grey-7">
+            Connect your wallet and verify your identity to create a vault.
+          </div>
         </q-form>
         <div v-if="depositing" class="q-mt-sm">
           <q-banner class="bg-info text-white">
@@ -159,6 +154,39 @@
       </q-card-section>
     </q-card>
 
+    <!-- Developer Info (toggle) -->
+    <q-card v-if="vault" flat bordered class="q-mt-md">
+      <q-card-section>
+        <q-expansion-item icon="bug_report" label="Developer Info" dense>
+          <div class="q-gutter-md q-mt-sm">
+            <q-input
+              label="Owner PKH (hex)"
+              :model-value="developerOwnerPkh"
+              readonly
+              outlined
+              dense
+              class="monospace"
+              input-class="text-select"
+            />
+            <q-input
+              label="Price Target (cents)"
+              :model-value="developerPriceTargetCents"
+              readonly
+              outlined
+              dense
+            />
+            <q-input
+              label="Connected Chain ID"
+              :model-value="developerChainId"
+              readonly
+              outlined
+              dense
+            />
+          </div>
+        </q-expansion-item>
+      </q-card-section>
+    </q-card>
+
     <!-- Empty State -->
     <q-card v-else flat bordered>
       <q-card-section class="text-center text-grey-6">
@@ -173,7 +201,7 @@ import { defineComponent } from 'vue'
 import {
   calculateContractAddress,
   initializeHodlVaultContract,
-  getContractBalance,
+  getAddressBalance,
   spendVault,
   depositToVault,
 } from 'src/services/blockchain'
@@ -193,6 +221,9 @@ export default defineComponent({
       depositing: false,
       verifyingIdentity: false,
       withdrawing: false,
+      balanceInterval: null,
+      depositPollInterval: null,
+      depositPollStartTime: null,
       vault: null,
       priceLoading: false,
       oracleSuccess: false,
@@ -237,6 +268,30 @@ export default defineComponent({
       if (!this.vault) return 0
       return this.vault.balance
     },
+
+    walletAddress() {
+      return this.$store.state.wallet?.address ?? null
+    },
+
+    developerOwnerPkh() {
+      return this.getOwnerPkhHex()
+    },
+
+    developerPriceTargetCents() {
+      if (this.form.priceTarget != null) {
+        return Math.floor(this.form.priceTarget * 100)
+      }
+      if (this.vault && this.vault.priceTarget != null) {
+        return Math.floor(this.vault.priceTarget * 100)
+      }
+      return null
+    },
+
+    developerChainId() {
+      return this.$walletConnect && typeof this.$walletConnect.getChainId === 'function'
+        ? this.$walletConnect.getChainId()
+        : null
+    },
   },
 
   methods: {
@@ -248,10 +303,6 @@ export default defineComponent({
       const ownerPkHex = this.$store.state.wallet?.publicKey ?? this.$walletConnect?.getOwnerPublicKeyHex?.() ?? null
       if (!ownerPkHex) return null
       return this.derivePkhFromPublicKey(ownerPkHex)
-    },
-
-    goToHome() {
-      this.$router.push('/')
     },
 
     /**
@@ -333,7 +384,7 @@ export default defineComponent({
         )
 
         // Get initial balance (should be 0 for new contract)
-        const balance = Number(await getContractBalance(contract))
+        const balance = Number(await getAddressBalance(contractAddress))
 
         // Store vault info
         this.vault = {
@@ -352,18 +403,28 @@ export default defineComponent({
         console.log('Vault created. Contract address:', contractAddress)
         console.log('To lock funds, send', this.form.amount, 'satoshis to:', contractAddress)
 
+        // Always start watching balance after vault creation (covers manual deposits)
+        this.startBalancePolling()
+
         // Immediately request a deposit from the connected wallet
         if (typeof wc.request === 'function') {
           this.depositing = true
           try {
-            await depositToVault(
+            const depositPromise = depositToVault(
               contractAddress,
               this.form.amount,
               (method, params) => wc.request(method, params)
             )
+            const depositResult = await Promise.race([
+              depositPromise,
+              new Promise((resolve) => setTimeout(() => resolve({ txid: null, raw: null }), 15000)),
+            ])
+            const txid = depositResult && depositResult.txid
             this.$q.notify({
               type: 'positive',
-              message: 'Deposit transaction requested in your wallet',
+              message: txid
+                ? `Deposit transaction submitted. TX: ${txid}`
+                : 'Deposit submitted in wallet. Waiting for network confirmation...',
               icon: 'check_circle',
             })
           } catch (depositErr) {
@@ -480,30 +541,100 @@ export default defineComponent({
     },
 
     async refreshVaultBalance() {
-      if (this.vault && this.vault.contract) {
+      if (this.vault && this.vault.contractAddress) {
         try {
-          const balance = await getContractBalance(this.vault.contract)
+          const balance = await getAddressBalance(this.vault.contractAddress)
           this.vault.balance = Number(balance)
         } catch (err) {
           console.error('Failed to refresh balance:', err)
+          this.$q.notify({
+            type: 'warning',
+            message: err?.message || 'Failed to refresh balance',
+          })
         }
+      }
+    },
+
+    startBalancePolling() {
+      if (!this.vault || !this.vault.contractAddress) return
+      if (this.depositPollInterval) {
+        clearInterval(this.depositPollInterval)
+        this.depositPollInterval = null
+      }
+      this.depositPollStartTime = Date.now()
+      this.depositPollInterval = setInterval(async () => {
+        if (!this.vault || !this.vault.contractAddress) {
+          clearInterval(this.depositPollInterval)
+          this.depositPollInterval = null
+          return
+        }
+        try {
+          const balance = await getAddressBalance(this.vault.contractAddress)
+          const numeric = Number(balance)
+          this.vault.balance = numeric
+          const elapsed = Date.now() - this.depositPollStartTime
+          if (numeric > 0) {
+            clearInterval(this.depositPollInterval)
+            this.depositPollInterval = null
+            this.$q.notify({
+              type: 'positive',
+              message: 'Deposit confirmed',
+              icon: 'check_circle',
+            })
+          } else if (elapsed >= 120000) {
+            clearInterval(this.depositPollInterval)
+            this.depositPollInterval = null
+          }
+        } catch (err) {
+          console.error('Vault balance watcher error:', err)
+          const elapsed = Date.now() - this.depositPollStartTime
+          if (elapsed >= 120000) {
+            clearInterval(this.depositPollInterval)
+            this.depositPollInterval = null
+          }
+        }
+      }, 5000)
+    },
+  },
+
+  watch: {
+    walletAddress(newAddress, oldAddress) {
+      if (!newAddress || newAddress !== oldAddress) {
+        this.vault = null
+        this.depositing = false
+        if (this.balanceInterval) {
+          clearInterval(this.balanceInterval)
+          this.balanceInterval = null
+        }
+        if (this.depositPollInterval) {
+          clearInterval(this.depositPollInterval)
+          this.depositPollInterval = null
+        }
+      }
+    },
+
+    vault(newVault, oldVault) {
+      if (newVault && newVault !== oldVault) {
+        this.refreshVaultBalance()
+        this.startBalancePolling()
       }
     },
   },
 
   mounted() {
     this.refreshPrice()
-    if (this.vault) {
+    this.balanceInterval = setInterval(() => {
       this.refreshVaultBalance()
-      this.balanceInterval = setInterval(() => {
-        this.refreshVaultBalance()
-      }, 30000)
-    }
+    }, 30000)
   },
 
   beforeUnmount() {
     if (this.balanceInterval) {
       clearInterval(this.balanceInterval)
+    }
+    if (this.depositPollInterval) {
+      clearInterval(this.depositPollInterval)
+      this.depositPollInterval = null
     }
   },
 })

@@ -1,16 +1,32 @@
-# MVP Definition: BCH HodlVault
+# MVP: HodlVault
 
-## Core Objective
-A web application that allows users to lock Bitcoin Cash (BCH) in a smart contract. The funds can only be released back to the owner's wallet if a specific BCH price target (verified by an Oracle) is met.
+## Project Vision
 
-## Essential Features
-1. **Wallet Integration:** Connect to mobile wallets via WalletConnect.
-2. **Vault Creation:** Input a "Price Target" and "Amount" to deploy a HodlVault contract.
-3. **Oracle Data:** Fetch signed price data from a trusted Oracle (Django Backend).
-4. **Covenant Security:** Ensure funds can ONLY be returned to the depositor's address.
-5. **Withdrawal Logic:** Trigger the smart contract's `spend` function when conditions are met.
+HodlVault is a "forced discipline" wallet for Bitcoin Cash (BCH) investors. It prevents impulsive selling by locking funds in a vault that only unlocks when a user-defined price target is reached, verified by a decentralized or centralized oracle.
 
-## Success Criteria
-- User can lock 1000 sats.
-- User cannot withdraw if price is below target.
-- User CAN withdraw if price is above target and Oracle provides a valid signature.
+## Core Features (The "Must-Haves")
+
+1. **Price-Locked Vaults:**
+   - Users create a vault and set a "Target Price" (e.g., $1,000 USD/BCH).
+   - The system fetches live BCH prices via an Oracle.
+   - Withdrawal functionality is disabled/hidden if `Current Price < Target Price`.
+2. **Chipnet Integration:**
+   - Operates on BCH Chipnet (Testnet) for safe development and testing.
+3. **Paytaca Wallet Connection:**
+   - Seamless integration with Paytaca for signing transactions.
+4. **QR Deposit System:**
+   - Generate a unique BCH address/QR code for each vault to allow easy deposits.
+5. **Real-time Status Engine:**
+   - UI must reflect transaction confirmations and price changes instantly without page refreshes.
+
+## User Stories
+
+- As a user, I want to set a target price so I am not tempted to sell during market dips.
+- As a user, I want to see a live "Lock Status" so I know exactly how far I am from my goal.
+- As a user, I want to deposit funds simply by scanning a QR code from my Paytaca mobile app.
+
+## Success Metrics
+
+- Zero-refresh data flow (Reactive UI).
+- Successful oracle price verification.
+- Lint-clean codebase using Options API.

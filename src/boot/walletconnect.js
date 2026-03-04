@@ -1,5 +1,5 @@
 /**
-* WalletConnect Boot File (v2.1.0)
+* WalletConnect Boot File (v2.1.1)
  * Real Paytaca connectivity via WalletConnect v2 Sign Client + Modal.
  * Using Paytaca-compatible chain IDs: bch:bchtest (testnet) and bch:bitcoincash (mainnet).
  * Reference: https://github.com/mainnet-pat/wc2-bch-bcr
@@ -19,15 +19,8 @@ const BCH_MAINNET_CHAIN = 'bch:bitcoincash'
 /** BCH config for WalletConnect v2 (matches wc2-bch-bcr spec for Paytaca compatibility) */
 const REQUIRED_METHODS = ['bch_getAddresses', 'bch_signTransaction', 'bch_signMessage']
 
-const REQUIRED_NAMESPACES = {
-  bch: {
-    chains: [BCH_TESTNET_CHAIN, BCH_CHIPNET_CHAIN, BCH_MAINNET_CHAIN],
-    methods: REQUIRED_METHODS,
-    events: ['addressesChanged'],
-  },
-}
+const REQUIRED_NAMESPACES = {}
 
-// Optional namespaces for wallets that support additional BCH methods
 const OPTIONAL_NAMESPACES = {
   bch: {
     chains: [BCH_TESTNET_CHAIN, BCH_CHIPNET_CHAIN, BCH_MAINNET_CHAIN],
@@ -222,7 +215,7 @@ export function initializeWalletConnect(store) {
   return {
     async connect() {
       if (!store) return null
-      const timeoutMs = 10000
+      const timeoutMs = 60000
       const connectFlow = async () => {
         const client = await getSignClient()
 
@@ -244,18 +237,6 @@ export function initializeWalletConnect(store) {
             await syncSessionToStore(store, client, bchSession)
             return store.state.wallet?.address ?? null
           }
-        }
-
-        // Delete old pairings to prevent "Old Session" conflicts
-        try {
-          const pairings = client.core?.pairing?.getPairings?.() ?? []
-          for (const p of pairings) {
-            if (p?.topic) {
-              await client.core.pairing.disconnect({ topic: p.topic }).catch(() => { /* skip per-pairing errors */ })
-            }
-          }
-        } catch {
-          // ignore if pairing API unavailable
         }
 
         // Use requiredNamespaces as per wc2-bch-bcr spec (Paytaca expects this format)
@@ -436,6 +417,7 @@ export default boot(({ app }) => {
   const store = app.config.globalProperties.$store
   if (!store) {
     console.warn('WalletConnect boot: Vuex store not available yet')
+    return
   }
   const wc = initializeWalletConnect(store)
   app.config.globalProperties.$walletConnect = wc

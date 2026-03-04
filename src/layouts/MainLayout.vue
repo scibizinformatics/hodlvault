@@ -2,7 +2,7 @@
   <q-layout view="lHh Lpr lFf">
     <q-header elevated>
       <q-toolbar>
-        <q-toolbar-title>BCH HodlVault v2.1.0</q-toolbar-title>
+        <q-toolbar-title>BCH HodlVault v2.1.1</q-toolbar-title>
 
         <div class="row items-center q-gutter-sm">
           <div class="text-caption q-mr-md">Quasar v{{ $q.version }}</div>

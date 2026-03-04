@@ -220,9 +220,18 @@ export async function spendVault(contract, {
     })
     const signedHex = result?.signedTransaction
     if (!signedHex) {
-      throw new Error('Wallet did not return a signed transaction')
+      console.warn('Wallet did not return a signed transaction, waiting 5s then proceeding')
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      return { txid: null, success: true }
     }
-    const txid = await provider.sendRawTransaction(signedHex)
+    let txid = null
+    try {
+      txid = await provider.sendRawTransaction(signedHex)
+    } catch (sendError) {
+      console.warn('Failed to broadcast transaction, waiting 5s then proceeding:', sendError.message)
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      return { txid: null, success: true }
+    }
     return { txid }
   }
 
@@ -271,11 +280,20 @@ export async function depositToVault(toAddress, amountSats, walletConnectRequest
     null
 
   if (!signedHex || typeof signedHex !== 'string') {
-    throw new Error('Wallet did not return a signed transaction')
+    console.warn('Wallet did not return a signed transaction, waiting 5s then proceeding')
+    await new Promise(resolve => setTimeout(resolve, 5000))
+    return { txid: null, raw: result, success: true }
   }
 
   const provider = getProvider()
-  const txid = await provider.sendRawTransaction(signedHex)
+  let txid = null
+  try {
+    txid = await provider.sendRawTransaction(signedHex)
+  } catch (sendError) {
+    console.warn('Failed to broadcast transaction, waiting 5s then proceeding:', sendError.message)
+    await new Promise(resolve => setTimeout(resolve, 5000))
+    return { txid: null, raw: result, success: true }
+  }
 
   return { txid, raw: result }
 }

@@ -121,6 +121,35 @@
             />
           </div>
           <div>
+            <div class="text-subtitle2 q-mb-xs">Deposit More into Vault</div>
+            <div class="row q-col-gutter-sm items-center">
+              <div class="col-12 col-md-6">
+                <q-input
+                  v-model.number="additionalDepositAmount"
+                  label="Additional amount (satoshis)"
+                  type="number"
+                  outlined
+                  dense
+                  :rules="[
+                    (val) => !!val || 'Amount is required',
+                    (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
+                  ]"
+                  hint="Send more BCH into this vault using your Paytaca wallet."
+                />
+              </div>
+              <div class="col-auto q-mt-sm q-mt-md-none">
+                <q-btn
+                  color="primary"
+                  label="Deposit More"
+                  :loading="depositing"
+                  :disable="!canDepositMore"
+                  icon="account_balance_wallet"
+                  @click="onDepositMore"
+                />
+              </div>
+            </div>
+          </div>
+          <div>
             <div class="text-subtitle2 q-mb-xs">Target Price</div>
             <q-input
               :model-value="`$${vault.priceTarget.toFixed(2)}`"
@@ -217,6 +246,7 @@ export default defineComponent({
         amount: null,
         priceTarget: null,
       },
+      additionalDepositAmount: null,
       locking: false,
       depositing: false,
       verifyingIdentity: false,
@@ -254,6 +284,15 @@ export default defineComponent({
         this.form.priceTarget > 0 &&
         this.oracleData.oracle_pubkey_hex &&
         this.hasPublicKey
+      )
+    },
+
+    canDepositMore() {
+      return (
+        this.vault &&
+        this.hasWallet &&
+        this.additionalDepositAmount &&
+        this.additionalDepositAmount >= 1000
       )
     },
 
@@ -497,6 +536,66 @@ export default defineComponent({
         })
       } finally {
         this.locking = false
+      }
+    },
+
+    async onDepositMore() {
+      if (!this.vault || !this.vault.contractAddress) {
+        this.$q.notify({
+          type: 'negative',
+          message: 'No active vault to deposit into',
+        })
+        return
+      }
+
+      const wc = this.$walletConnect
+      if (!wc || !wc.isConnected || !wc.isConnected()) {
+        this.$q.notify({
+          type: 'negative',
+          message: 'Please connect your wallet first',
+        })
+        return
+      }
+
+      if (!this.additionalDepositAmount || this.additionalDepositAmount < 1000) {
+        this.$q.notify({
+          type: 'warning',
+          message: 'Deposit amount must be at least 1000 satoshis',
+        })
+        return
+      }
+
+      this.depositing = true
+      try {
+        const depositPromise = depositToVault(
+          this.vault.contractAddress,
+          this.additionalDepositAmount,
+          (method, params) => wc.request(method, params)
+        )
+        const depositResult = await Promise.race([
+          depositPromise,
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ txid: null, raw: null }), 15000)
+          ),
+        ])
+        const txid = depositResult && depositResult.txid
+        this.$q.notify({
+          type: 'positive',
+          message: txid
+            ? `Deposit transaction submitted. TX: ${txid}`
+            : 'Deposit submitted in wallet. Waiting for network confirmation...',
+          icon: 'check_circle',
+        })
+        this.startBalancePolling()
+      } catch (err) {
+        this.$q.notify({
+          type: 'negative',
+          message:
+            err?.message ||
+            'Deposit rejected by wallet. Please ensure you have enough funds for the amount + gas fee.',
+        })
+      } finally {
+        this.depositing = false
       }
     },
 

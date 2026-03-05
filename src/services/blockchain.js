@@ -55,7 +55,11 @@ function inferNetworkFromAddress(address) {
   if (typeof address !== 'string') return DEFAULT_NETWORK
   const prefix = address.includes(':') ? address.split(':')[0] : null
   if (prefix === 'bitcoincash') return 'mainnet'
-  if (prefix === 'bchtest') return 'testnet3'
+  if (prefix === 'bchtest') {
+    // Chipnet and testnet both use the "bchtest" prefix.
+    // If the app is configured for chipnet, respect that; otherwise default to testnet3.
+    return DEFAULT_NETWORK === 'chipnet' ? 'chipnet' : 'testnet3'
+  }
   if (prefix === 'chipnet') return 'chipnet'
   return DEFAULT_NETWORK
 }
@@ -181,8 +185,16 @@ export async function spendVault(contract, {
     throw new Error('No UTXOs available to spend from the vault')
   }
 
-  const utxo = utxos[0]
-  const minerFee = 1000n
+  // Prefer the largest UTXO so we are less likely to hit the
+  // "insufficient balance for fee" edge case on very small UTXOs.
+  const utxo = utxos.reduce((best, current) =>
+    !best || current.satoshis > best.satoshis ? current : best,
+    null
+  )
+
+  // Conservative but smaller miner fee; the TransactionBuilder will still
+  // compute final size-based fee when broadcasting.
+  const minerFee = 400n
   const amount = utxo.satoshis - minerFee
   if (amount <= 0n) {
     throw new Error('Insufficient balance to cover miner fee')
@@ -287,7 +299,15 @@ export async function depositToVault(toAddress, amountSats, walletConnectRequest
     console.warn('bch_sendTransaction failed, falling back to bch_signTransaction:', sendTxError)
 
     // 2) Fallback: legacy shortcut some wallets support via bch_signTransaction
-    result = await walletConnectRequest('bch_signTransaction', serializedPayload)
+    try {
+      result = await walletConnectRequest('bch_signTransaction', serializedPayload)
+    } catch (signTxError) {
+      console.error('bch_signTransaction failed for simple send payload:', signTxError)
+      throw new Error(
+        'Your wallet does not support automated deposits via WalletConnect. ' +
+          'Please use the QR code or send manually to the vault address.'
+      )
+    }
   }
 
   const signedHex =

@@ -222,14 +222,13 @@ export async function spendVault(contract, {
       broadcast: false,
       userPrompt: 'Sign vault withdrawal',
     })
-    const transactionHex = txBuilder.build()
-    const serializedSourceOutputs = serializeForWc(wcPayload.sourceOutputs)
-    const result = await walletConnectRequest('bch_signTransaction', {
-      transaction: transactionHex,
-      sourceOutputs: serializedSourceOutputs,
+    const serializedPayload = serializeForWc({
+      transaction: wcPayload.transaction,
+      sourceOutputs: wcPayload.sourceOutputs,
       broadcast: false,
       userPrompt: 'Sign vault withdrawal',
     })
+    const result = await walletConnectRequest('bch_signTransaction', serializedPayload)
     const signedHex = result?.signedTransaction
     if (!signedHex) {
       console.warn('Wallet did not return a signed transaction, waiting 5s then proceeding')

@@ -233,6 +233,9 @@ export default defineComponent({
         signature_hex: '',
         oracle_pubkey_hex: '',
       },
+
+      // Vault persistence (localStorage)
+      vaultPersistKey: 'hodl-vault-active-vault',
     }
   },
 
@@ -295,6 +298,36 @@ export default defineComponent({
   },
 
   methods: {
+    persistVaultState(vaultState) {
+      if (typeof localStorage === 'undefined') return
+      try {
+        if (!vaultState) {
+          localStorage.removeItem(this.vaultPersistKey)
+          return
+        }
+        localStorage.setItem(this.vaultPersistKey, JSON.stringify(vaultState))
+      } catch {
+        // ignore persistence errors
+      }
+    },
+
+    loadPersistedVaultState() {
+      if (typeof localStorage === 'undefined') return null
+      try {
+        const raw = localStorage.getItem(this.vaultPersistKey)
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return null
+        return parsed
+      } catch {
+        return null
+      }
+    },
+
+    clearPersistedVaultState() {
+      this.persistVaultState(null)
+    },
+
     /**
      * Get owner PKH derived from the connected/generated wallet's public key.
      * Returns null if no wallet is connected or signer not set.
@@ -365,7 +398,7 @@ export default defineComponent({
       try {
         const ownerPkhHex = this.getOwnerPkhHex()
         const oraclePkHex = this.oracleData.oracle_pubkey_hex
-        const priceTarget = Math.floor(this.form.priceTarget * 100)
+        const priceTargetCents = Math.floor(this.form.priceTarget * 100)
 
         if (!oraclePkHex) {
           throw new Error('Oracle public key not loaded. Refresh the price first.')
@@ -374,13 +407,13 @@ export default defineComponent({
         const contractAddress = await calculateContractAddress(
           ownerPkhHex,
           oraclePkHex,
-          priceTarget
+          priceTargetCents
         )
 
         const contract = initializeHodlVaultContract(
           ownerPkhHex,
           oraclePkHex,
-          priceTarget
+          priceTargetCents
         )
 
         // Get initial balance (should be 0 for new contract)
@@ -391,8 +424,22 @@ export default defineComponent({
           contractAddress,
           balance: Number(balance),
           priceTarget: this.form.priceTarget,
+          priceTargetCents,
+          ownerPkhHex,
+          oraclePkHex,
           contract, // Store contract instance for withdrawal
         }
+
+        // Persist vault so it survives refresh
+        this.persistVaultState({
+          walletAddress: this.walletAddress,
+          contractAddress,
+          priceTarget: this.form.priceTarget,
+          priceTargetCents,
+          ownerPkhHex,
+          oraclePkHex,
+          createdAt: Date.now(),
+        })
 
         this.$q.notify({
           type: 'positive',
@@ -602,6 +649,7 @@ export default defineComponent({
       if (!newAddress || newAddress !== oldAddress) {
         this.vault = null
         this.depositing = false
+        this.clearPersistedVaultState()
         if (this.balanceInterval) {
           clearInterval(this.balanceInterval)
           this.balanceInterval = null
@@ -623,6 +671,39 @@ export default defineComponent({
 
   mounted() {
     this.refreshPrice()
+    // Restore persisted vault (if it belongs to current wallet)
+    const persisted = this.loadPersistedVaultState()
+    if (persisted && persisted.walletAddress && persisted.walletAddress === this.walletAddress) {
+      const currentOwnerPkhHex = this.getOwnerPkhHex()
+      const canRestore =
+        persisted.contractAddress &&
+        persisted.oraclePkHex &&
+        persisted.priceTargetCents != null &&
+        persisted.ownerPkhHex &&
+        currentOwnerPkhHex &&
+        persisted.ownerPkhHex === currentOwnerPkhHex
+
+      if (canRestore) {
+        const contract = initializeHodlVaultContract(
+          persisted.ownerPkhHex,
+          persisted.oraclePkHex,
+          persisted.priceTargetCents
+        )
+        this.vault = {
+          contractAddress: persisted.contractAddress,
+          balance: 0,
+          priceTarget: persisted.priceTarget ?? null,
+          priceTargetCents: persisted.priceTargetCents,
+          ownerPkhHex: persisted.ownerPkhHex,
+          oraclePkHex: persisted.oraclePkHex,
+          contract,
+        }
+        this.refreshVaultBalance()
+        this.startBalancePolling()
+      } else {
+        this.clearPersistedVaultState()
+      }
+    }
     this.balanceInterval = setInterval(() => {
       this.refreshVaultBalance()
     }, 30000)

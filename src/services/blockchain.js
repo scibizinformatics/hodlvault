@@ -240,8 +240,16 @@ export async function spendVault(contract, {
 }
 
 /**
- * Request a standard BCH payment to the vault address using WalletConnect.
- * Uses bch_signTransaction and broadcasts via ElectrumNetworkProvider.
+ * Request a BCH payment to the vault address using WalletConnect.
+ *
+ * Preferred path:
+ *   - Use the wc2-bch-bcr-style "bch_sendTransaction" helper with
+ *     { recipientCashaddress, valueSatoshis, broadcast, userPrompt }.
+ *
+ * Fallback path:
+ *   - If the wallet does not support bch_sendTransaction, fall back to the
+ *     legacy bch_signTransaction shortcut with the same payload.
+ *
  * @param {string} toAddress - Vault contract address (CashAddr)
  * @param {number|bigint} amountSats - Amount to send in satoshis
  * @param {function} walletConnectRequest - (method, params) => Promise<any>
@@ -261,14 +269,26 @@ export async function depositToVault(toAddress, amountSats, walletConnectRequest
     throw new Error('Deposit amount must be greater than zero')
   }
 
-  const payload = serializeForWc({
+  const basePayload = {
     recipientCashaddress: toAddress,
     valueSatoshis: BigInt(amountNumber),
     broadcast: false,
     userPrompt: 'Lock funds into HodlVault',
-  })
+  }
 
-  const result = await walletConnectRequest('bch_signTransaction', payload)
+  const serializedPayload = serializeForWc(basePayload)
+
+  let result
+
+  // 1) Preferred: use the helper method if the wallet supports it
+  try {
+    result = await walletConnectRequest('bch_sendTransaction', serializedPayload)
+  } catch (sendTxError) {
+    console.warn('bch_sendTransaction failed, falling back to bch_signTransaction:', sendTxError)
+
+    // 2) Fallback: legacy shortcut some wallets support via bch_signTransaction
+    result = await walletConnectRequest('bch_signTransaction', serializedPayload)
+  }
 
   const signedHex =
     (result && result.signedTransaction) ||

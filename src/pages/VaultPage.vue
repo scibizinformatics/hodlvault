@@ -88,7 +88,7 @@
             <template v-slot:avatar>
               <q-spinner-dots color="white" size="24px" />
             </template>
-            Waiting for Deposit... Confirm the payment in your wallet.
+            Waiting for Deposit... Confirm the payment in your Paytaca wallet.
           </q-banner>
         </div>
       </q-card-section>
@@ -146,6 +146,18 @@
                   icon="account_balance_wallet"
                   @click="onDepositMore"
                 />
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="text-subtitle2 q-mb-xs">Vault Deposit QR</div>
+            <div class="row items-center q-gutter-md">
+              <q-card flat bordered class="q-pa-sm flex flex-center">
+                <QrcodeVue :value="vault.contractAddress" :size="160" />
+              </q-card>
+              <div class="text-body2 text-grey-7">
+                Scan this QR in Paytaca to fill the vault address automatically, then
+                enter the amount you want to send.
               </div>
             </div>
           </div>
@@ -227,6 +239,7 @@
 
 <script>
 import { defineComponent } from 'vue'
+import QrcodeVue from 'qrcode.vue'
 import {
   calculateContractAddress,
   initializeHodlVaultContract,
@@ -239,6 +252,10 @@ import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
 
 export default defineComponent({
   name: 'VaultPage',
+
+  components: {
+    QrcodeVue,
+  },
 
   data() {
     return {
@@ -489,10 +506,10 @@ export default defineComponent({
         console.log('Vault created. Contract address:', contractAddress)
         console.log('To lock funds, send', this.form.amount, 'satoshis to:', contractAddress)
 
-        // Always start watching balance after vault creation (covers manual deposits)
+        // Always start watching balance after vault creation (covers both manual and WalletConnect deposits)
         this.startBalancePolling()
 
-        // Immediately request a deposit from the connected wallet
+        // Immediately request a deposit from the connected wallet using WalletConnect
         if (typeof wc.request === 'function') {
           this.depositing = true
           try {
@@ -503,7 +520,9 @@ export default defineComponent({
             )
             const depositResult = await Promise.race([
               depositPromise,
-              new Promise((resolve) => setTimeout(() => resolve({ txid: null, raw: null }), 15000)),
+              new Promise((resolve) =>
+                setTimeout(() => resolve({ txid: null, raw: null }), 20000)
+              ),
             ])
             const txid = depositResult && depositResult.txid
             this.$q.notify({
@@ -514,11 +533,12 @@ export default defineComponent({
               icon: 'check_circle',
             })
           } catch (depositErr) {
+            console.error('Initial deposit via WalletConnect failed:', depositErr)
             this.$q.notify({
               type: 'negative',
               message:
                 depositErr?.message ||
-                'Deposit rejected by wallet. Please ensure you have enough funds for the amount + gas fee.',
+                'Deposit rejected by wallet. Please ensure you have enough funds for the amount + fee.',
             })
           } finally {
             this.depositing = false
@@ -526,7 +546,8 @@ export default defineComponent({
         } else {
           this.$q.notify({
             type: 'warning',
-            message: 'WalletConnect request function is not available; please send funds manually.',
+            message:
+              'WalletConnect request function is not available; please send funds manually to the vault address.',
           })
         }
       } catch (err) {
@@ -536,66 +557,6 @@ export default defineComponent({
         })
       } finally {
         this.locking = false
-      }
-    },
-
-    async onDepositMore() {
-      if (!this.vault || !this.vault.contractAddress) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'No active vault to deposit into',
-        })
-        return
-      }
-
-      const wc = this.$walletConnect
-      if (!wc || !wc.isConnected || !wc.isConnected()) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Please connect your wallet first',
-        })
-        return
-      }
-
-      if (!this.additionalDepositAmount || this.additionalDepositAmount < 1000) {
-        this.$q.notify({
-          type: 'warning',
-          message: 'Deposit amount must be at least 1000 satoshis',
-        })
-        return
-      }
-
-      this.depositing = true
-      try {
-        const depositPromise = depositToVault(
-          this.vault.contractAddress,
-          this.additionalDepositAmount,
-          (method, params) => wc.request(method, params)
-        )
-        const depositResult = await Promise.race([
-          depositPromise,
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ txid: null, raw: null }), 15000)
-          ),
-        ])
-        const txid = depositResult && depositResult.txid
-        this.$q.notify({
-          type: 'positive',
-          message: txid
-            ? `Deposit transaction submitted. TX: ${txid}`
-            : 'Deposit submitted in wallet. Waiting for network confirmation...',
-          icon: 'check_circle',
-        })
-        this.startBalancePolling()
-      } catch (err) {
-        this.$q.notify({
-          type: 'negative',
-          message:
-            err?.message ||
-            'Deposit rejected by wallet. Please ensure you have enough funds for the amount + gas fee.',
-        })
-      } finally {
-        this.depositing = false
       }
     },
 
@@ -679,6 +640,67 @@ export default defineComponent({
         })
       } finally {
         this.withdrawing = false
+      }
+    },
+
+    async onDepositMore() {
+      if (!this.vault || !this.vault.contractAddress) {
+        this.$q.notify({
+          type: 'negative',
+          message: 'No active vault to deposit into',
+        })
+        return
+      }
+
+      const wc = this.$walletConnect
+      if (!wc || !wc.isConnected || !wc.isConnected()) {
+        this.$q.notify({
+          type: 'negative',
+          message: 'Please connect your wallet first',
+        })
+        return
+      }
+
+      if (!this.additionalDepositAmount || this.additionalDepositAmount < 1000) {
+        this.$q.notify({
+          type: 'warning',
+          message: 'Deposit amount must be at least 1000 satoshis',
+        })
+        return
+      }
+
+      this.depositing = true
+      try {
+        const depositPromise = depositToVault(
+          this.vault.contractAddress,
+          this.additionalDepositAmount,
+          (method, params) => wc.request(method, params)
+        )
+        const depositResult = await Promise.race([
+          depositPromise,
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ txid: null, raw: null }), 20000)
+          ),
+        ])
+        const txid = depositResult && depositResult.txid
+        this.$q.notify({
+          type: 'positive',
+          message: txid
+            ? `Deposit transaction submitted. TX: ${txid}`
+            : 'Deposit submitted in wallet. Waiting for network confirmation...',
+          icon: 'check_circle',
+        })
+        this.startBalancePolling()
+      } catch (err) {
+        console.error('Additional deposit via WalletConnect failed:', err)
+        this.$q.notify({
+          type: 'negative',
+          message:
+            err?.message ||
+            'Deposit rejected by wallet. Please ensure you have enough funds for the amount + fee.',
+        })
+      } finally {
+        this.depositing = false
       }
     },
 

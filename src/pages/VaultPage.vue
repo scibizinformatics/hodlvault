@@ -180,6 +180,67 @@
               :color="canWithdraw ? 'positive' : 'negative'"
             />
           </div>
+          <div>
+            <div class="text-subtitle2 q-mb-xs">Withdraw to (optional)</div>
+            <p class="text-caption text-grey-7 q-mb-sm">
+              Leave empty to use your connected wallet address, or paste / scan your Paytaca receive address below.
+            </p>
+            <q-input
+              v-model="withdrawToAddress"
+              label="BCH address (paste or from QR)"
+              outlined
+              dense
+              placeholder="bitcoincash:... or bchtest:..."
+              class="monospace"
+              clearable
+              :rules="[ (val) => !val || isValidBchAddress(val) || 'Invalid BCH address' ]"
+            />
+            <div class="row q-gutter-sm q-mt-sm flex-wrap">
+              <q-btn
+                flat
+                dense
+                color="primary"
+                icon="qr_code_scanner"
+                label="Scan with camera"
+                @click="openCameraScan"
+              />
+              <q-btn
+                flat
+                dense
+                color="primary"
+                icon="upload_file"
+                label="Upload QR image"
+                @click="triggerWithdrawQrInput"
+              />
+              <input
+                ref="withdrawQrInputRef"
+                type="file"
+                accept="image/*"
+                class="hidden"
+                @change="onWithdrawQrFile"
+              />
+            </div>
+            <q-dialog v-model="showCameraScan" persistent @hide="stopCamera">
+              <q-card style="min-width: 320px">
+                <q-card-section>
+                  <div class="text-h6">Scan Paytaca receive QR</div>
+                  <p class="text-caption text-grey-7">Point your laptop camera at the QR code on your Paytaca receive screen.</p>
+                </q-card-section>
+                <q-card-section class="flex flex-center">
+                  <video
+                    ref="cameraVideoRef"
+                    autoplay
+                    playsinline
+                    muted
+                    class="camera-video"
+                  />
+                </q-card-section>
+                <q-card-actions align="right">
+                  <q-btn flat label="Cancel" color="grey" v-close-popup />
+                </q-card-actions>
+              </q-card>
+            </q-dialog>
+          </div>
           <q-btn
             color="primary"
             label="Withdraw"
@@ -240,6 +301,7 @@
 <script>
 import { defineComponent } from 'vue'
 import QrcodeVue from 'qrcode.vue'
+import jsQR from 'jsqr'
 import {
   calculateContractAddress,
   initializeHodlVaultContract,
@@ -283,6 +345,14 @@ export default defineComponent({
 
       // Vault persistence (localStorage)
       vaultPersistKey: 'hodl-vault-active-vault',
+
+      // Withdraw destination (optional): from paste or QR scan/upload
+      withdrawToAddress: '',
+
+      // Live camera QR scan
+      showCameraScan: false,
+      cameraStream: null,
+      cameraScanInterval: null,
     }
   },
 
@@ -586,6 +656,140 @@ export default defineComponent({
       }
     },
 
+    /** Validate BCH CashAddr (bitcoincash:, bchtest:, chipnet:) */
+    isValidBchAddress(val) {
+      if (!val || typeof val !== 'string') return false
+      const trimmed = val.trim()
+      return /^(bitcoincash|bchtest|chipnet):[a-zA-Z0-9]+$/i.test(trimmed)
+    },
+
+    triggerWithdrawQrInput() {
+      this.$refs.withdrawQrInputRef?.click()
+    },
+
+    openCameraScan() {
+      this.showCameraScan = true
+      this.$nextTick(() => this.startCamera())
+    },
+
+    startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.$q.notify({ type: 'negative', message: 'Camera not supported in this browser' })
+        this.showCameraScan = false
+        return
+      }
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: 'environment' } })
+        .then((stream) => {
+          this.cameraStream = stream
+          this.$nextTick(() => {
+            const video = this.$refs.cameraVideoRef
+            if (video) {
+              video.srcObject = stream
+              video.play().catch(() => {})
+              this.cameraScanInterval = setInterval(() => this.captureAndDecode(), 250)
+            }
+          })
+        })
+        .catch((err) => {
+          this.$q.notify({
+            type: 'negative',
+            message: err?.message || 'Camera access denied or unavailable',
+          })
+          this.showCameraScan = false
+        })
+    },
+
+    stopCamera() {
+      if (this.cameraScanInterval) {
+        clearInterval(this.cameraScanInterval)
+        this.cameraScanInterval = null
+      }
+      if (this.cameraStream) {
+        this.cameraStream.getTracks().forEach((t) => t.stop())
+        this.cameraStream = null
+      }
+      const video = this.$refs.cameraVideoRef
+      if (video && video.srcObject) {
+        video.srcObject = null
+      }
+    },
+
+    captureAndDecode() {
+      const video = this.$refs.cameraVideoRef
+      if (!video || !video.videoWidth || video.readyState < 2) return
+      const canvas = document.createElement('canvas')
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.drawImage(video, 0, 0)
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const code = jsQR(imageData.data, imageData.width, imageData.height)
+      if (code && code.data) {
+        const address = this.extractBchAddressFromQrData(code.data)
+        if (address) {
+          this.withdrawToAddress = address
+          this.$q.notify({ type: 'positive', message: 'Address scanned', icon: 'check_circle' })
+          this.stopCamera()
+          this.showCameraScan = false
+        }
+      }
+    },
+
+    onWithdrawQrFile(event) {
+      const file = event.target?.files?.[0]
+      if (!file || !file.type.startsWith('image/')) {
+        this.$q.notify({ type: 'warning', message: 'Please choose an image file (e.g. Paytaca receive QR screenshot)' })
+        event.target.value = ''
+        return
+      }
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          this.$q.notify({ type: 'negative', message: 'Could not read image' })
+          event.target.value = ''
+          return
+        }
+        ctx.drawImage(img, 0, 0)
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const code = jsQR(imageData.data, imageData.width, imageData.height)
+        if (!code || !code.data) {
+          this.$q.notify({ type: 'warning', message: 'No QR code found in image' })
+          event.target.value = ''
+          return
+        }
+        const address = this.extractBchAddressFromQrData(code.data)
+        if (address) {
+          this.withdrawToAddress = address
+          this.$q.notify({ type: 'positive', message: 'Address read from QR', icon: 'check_circle' })
+        } else {
+          this.$q.notify({ type: 'warning', message: 'QR code does not contain a BCH address' })
+        }
+        event.target.value = ''
+      }
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        this.$q.notify({ type: 'negative', message: 'Failed to load image' })
+        event.target.value = ''
+      }
+      img.src = url
+    },
+
+    /** Extract BCH CashAddr from Paytaca-style receive QR data (e.g. "bitcoincash:qp3d...?amount=0.01") */
+    extractBchAddressFromQrData(data) {
+      if (!data || typeof data !== 'string') return null
+      const withoutQuery = data.trim().split('?')[0].trim()
+      const match = withoutQuery.match(/^(bitcoincash|bchtest|chipnet):[a-zA-Z0-9]+$/i)
+      return match ? match[0] : null
+    },
+
     async onWithdraw() {
       if (!this.canWithdraw || !this.vault) return
 
@@ -598,9 +802,14 @@ export default defineComponent({
         return
       }
 
-      const ownerAddress = wc.getAddress()
+      const customAddress = this.withdrawToAddress?.trim()
+      const ownerAddress = customAddress || wc.getAddress()
       if (!ownerAddress) {
         this.$q.notify({ type: 'negative', message: 'Could not get wallet address' })
+        return
+      }
+      if (customAddress && !this.isValidBchAddress(customAddress)) {
+        this.$q.notify({ type: 'negative', message: 'Invalid BCH address. Use a CashAddr (bitcoincash:, bchtest:, or chipnet:).' })
         return
       }
 
@@ -617,7 +826,7 @@ export default defineComponent({
 
       this.withdrawing = true
       try {
-        const result = await spendVault(this.vault.contract, {
+        const withdrawPromise = spendVault(this.vault.contract, {
           ownerPkHex: wc.getOwnerPublicKeyHex() || '',
           ownerSigTemplate: ownerSigTemplate || undefined,
           oracleMessageHex: this.oracleData.message_hex,
@@ -627,6 +836,23 @@ export default defineComponent({
             walletConnectRequest: (method, params) => wc.request(method, params),
           }),
         })
+
+        const result = await Promise.race([
+          withdrawPromise,
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ txid: null, timeout: true }), 25000)
+          ),
+        ])
+
+        if (result && result.timeout) {
+          this.$q.notify({
+            type: 'warning',
+            message:
+              'Withdrawal request timed out waiting for wallet. Please check Paytaca for any pending or sent transaction.',
+          })
+          return
+        }
+
         this.$q.notify({
           type: 'positive',
           message: `Withdrawal sent. TX: ${result.txid}`,
@@ -634,9 +860,13 @@ export default defineComponent({
         })
         await this.refreshVaultBalance()
       } catch (err) {
+        const msg = err?.message || 'Failed to withdraw'
+        const isInternal = msg.includes('Internal error') || (err?.code === -32603)
         this.$q.notify({
           type: 'negative',
-          message: err?.message || 'Failed to withdraw',
+          message: isInternal
+            ? 'Wallet could not sign the withdrawal (internal error). Try ensuring Paytaca is updated and you are on the correct network (e.g. chipnet).'
+            : msg,
         })
       } finally {
         this.withdrawing = false
@@ -831,6 +1061,7 @@ export default defineComponent({
   },
 
   beforeUnmount() {
+    this.stopCamera()
     if (this.balanceInterval) {
       clearInterval(this.balanceInterval)
     }
@@ -851,5 +1082,15 @@ export default defineComponent({
 }
 .border-positive {
   border: 2px solid var(--q-positive);
+}
+.hidden {
+  display: none !important;
+}
+.camera-video {
+  width: 100%;
+  max-width: 320px;
+  max-height: 240px;
+  object-fit: cover;
+  background: #000;
 }
 </style>

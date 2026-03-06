@@ -222,8 +222,13 @@ export async function spendVault(contract, {
       broadcast: false,
       userPrompt: 'Sign vault withdrawal',
     })
+    // Many wallets (e.g. Paytaca) expect transaction as raw hex string, not object.
+    const transactionHex =
+      typeof wcPayload.transaction === 'string'
+        ? wcPayload.transaction
+        : txBuilder.build()
     const serializedPayload = serializeForWc({
-      transaction: wcPayload.transaction,
+      transaction: transactionHex,
       sourceOutputs: wcPayload.sourceOutputs,
       broadcast: false,
       userPrompt: 'Sign vault withdrawal',

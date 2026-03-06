@@ -112,13 +112,38 @@
           </div>
           <div>
             <div class="text-subtitle2 q-mb-xs">Balance</div>
-            <q-input
-              :model-value="formatBalance(displayBalance)"
-              readonly
-              outlined
-              dense
-              suffix="satoshis"
-            />
+            <div class="row items-center q-gutter-sm">
+              <q-input
+                :model-value="formatBalance(displayBalance)"
+                readonly
+                outlined
+                dense
+                suffix="satoshis"
+                class="col"
+              />
+              <q-btn
+                flat
+                dense
+                round
+                icon="refresh"
+                color="primary"
+                :loading="balanceRefreshing"
+                @click="refreshVaultBalance"
+                aria-label="Refresh balance from blockchain"
+              />
+            </div>
+            <p class="text-caption text-grey-7 q-mt-xs q-mb-none">
+              Live from chipnet blockchain. Clearing site data does not move funds—your vault address stays the same; re-enter the same vault settings to see this balance again.
+            </p>
+            <a
+              v-if="vault && vault.contractAddress"
+              :href="chipnetExplorerAddressUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-caption text-primary"
+            >
+              Verify balance on chipnet explorer →
+            </a>
           </div>
           <div>
             <div class="text-subtitle2 q-mb-xs">Deposit More into Vault</div>
@@ -241,6 +266,9 @@
               </q-card>
             </q-dialog>
           </div>
+          <p class="text-caption text-grey-7">
+            Withdrawal sends vault funds to your chosen address (chipnet). Your Paytaca must approve the transaction, like receiving from a faucet—you provide the address, then confirm in the wallet.
+          </p>
           <q-btn
             color="primary"
             label="Withdraw"
@@ -353,6 +381,8 @@ export default defineComponent({
       showCameraScan: false,
       cameraStream: null,
       cameraScanInterval: null,
+
+      balanceRefreshing: false,
     }
   },
 
@@ -420,6 +450,12 @@ export default defineComponent({
       return this.$walletConnect && typeof this.$walletConnect.getChainId === 'function'
         ? this.$walletConnect.getChainId()
         : null
+    },
+
+    chipnetExplorerAddressUrl() {
+      if (!this.vault || !this.vault.contractAddress) return ''
+      const addr = encodeURIComponent(this.vault.contractAddress)
+      return `https://chipnet.bch.ninja/address/${addr}`
     },
   },
 
@@ -939,17 +975,19 @@ export default defineComponent({
     },
 
     async refreshVaultBalance() {
-      if (this.vault && this.vault.contractAddress) {
-        try {
-          const balance = await getAddressBalance(this.vault.contractAddress)
-          this.vault.balance = Number(balance)
-        } catch (err) {
-          console.error('Failed to refresh balance:', err)
-          this.$q.notify({
-            type: 'warning',
-            message: err?.message || 'Failed to refresh balance',
-          })
-        }
+      if (!this.vault || !this.vault.contractAddress) return
+      this.balanceRefreshing = true
+      try {
+        const balance = await getAddressBalance(this.vault.contractAddress)
+        this.vault.balance = Number(balance)
+      } catch (err) {
+        console.error('Failed to refresh balance:', err)
+        this.$q.notify({
+          type: 'warning',
+          message: err?.message || 'Failed to refresh balance',
+        })
+      } finally {
+        this.balanceRefreshing = false
       }
     },
 

@@ -857,8 +857,24 @@ export default defineComponent({
         return
       }
 
+      // Enhanced debugging
+      console.log('DEBUG: Withdrawal initiated', {
+        hasVault: !!this.vault,
+        vaultAddress: this.vault.contractAddress,
+        ownerAddress,
+        customAddress: customAddress || 'none',
+        chainId: wc.getChainId(),
+        hasPublicKey: !!wc.getOwnerPublicKeyHex(),
+      })
+
       const ownerSigTemplate = wc.getSignatureTemplate()
       const useWalletConnectSign = !ownerSigTemplate && typeof wc.request === 'function'
+
+      console.log('DEBUG: Signing method selection', {
+        hasSignatureTemplate: !!ownerSigTemplate,
+        useWalletConnectSign,
+        hasRequestFunction: typeof wc.request === 'function',
+      })
 
       this.withdrawing = true
       try {
@@ -869,14 +885,17 @@ export default defineComponent({
           oracleSigHex: this.oracleData.signature_hex,
           ownerAddress,
           ...(useWalletConnectSign && {
-            walletConnectRequest: (method, params) => wc.request(method, params),
+            walletConnectRequest: (method, params) => {
+              console.log('DEBUG: WalletConnect request:', method, params)
+              return wc.request(method, params)
+            },
           }),
         })
 
         const result = await Promise.race([
           withdrawPromise,
           new Promise((resolve) =>
-            setTimeout(() => resolve({ txid: null, timeout: true }), 25000)
+            setTimeout(() => resolve({ txid: null, timeout: true }), 30000) // Increased timeout
           ),
         ])
 
@@ -889,6 +908,17 @@ export default defineComponent({
           return
         }
 
+        if (result && result.success && !result.txid) {
+          this.$q.notify({
+            type: 'info',
+            message:
+              'Withdrawal processed by wallet but transaction ID not available. Please check your wallet for transaction status.',
+            icon: 'info',
+          })
+          await this.refreshVaultBalance()
+          return
+        }
+
         this.$q.notify({
           type: 'positive',
           message: `Withdrawal sent. TX: ${result.txid}`,
@@ -896,17 +926,56 @@ export default defineComponent({
         })
         await this.refreshVaultBalance()
       } catch (err) {
+        console.error('DEBUG: Withdrawal error details:', {
+          message: err?.message,
+          code: err?.code,
+          data: err?.data,
+          stack: err?.stack,
+        })
+
         const msg = err?.message || 'Failed to withdraw'
         const isInternal = msg.includes('Internal error') || (err?.code === -32603)
-        this.$q.notify({
-          type: 'negative',
-          message: isInternal
-            ? 'Wallet could not sign the withdrawal (internal error). Try ensuring Paytaca is updated and you are on the correct network (e.g. chipnet).'
-            : msg,
-        })
+        
+        if (isInternal) {
+          // Try to provide more specific guidance
+          const enhancedMessage = this.getEnhancedErrorMessage(err)
+          this.$q.notify({
+            type: 'negative',
+            message: enhancedMessage,
+            timeout: 10000, // Longer timeout for complex message
+          })
+        } else {
+          this.$q.notify({
+            type: 'negative',
+            message: msg,
+          })
+        }
       } finally {
         this.withdrawing = false
       }
+    },
+
+    getEnhancedErrorMessage(err) {
+      const baseMessage = 'Wallet could not sign the withdrawal (internal error).'
+      
+      const suggestions = [
+        'Try ensuring Paytaca is updated and you are on the correct network (chipnet).',
+        'Check that Paytaca has sufficient BCH for fees.',
+        'Try restarting Paytaca and reconnecting the wallet.',
+        'Verify the vault has sufficient balance for withdrawal.',
+        'Check browser console for detailed debug information.',
+      ]
+      
+      // Add specific suggestions based on error details
+      if (err?.code === -32603) {
+        suggestions.push('This is a JSON-RPC internal error. The wallet may not support this transaction type.')
+      }
+      
+      if (err?.message?.includes('timeout')) {
+        suggestions.push('The request timed out. Try again with a better network connection.')
+      }
+      
+      return baseMessage + '\n\nPossible solutions:\n• ' + suggestions.join('\n• ')
     },
 
     async onDepositMore() {

@@ -345,7 +345,12 @@ export function initializeWalletConnect(store) {
 }
 
 async function syncSessionToStore(store, client, session) {
-  const chainId = session.namespaces?.bch?.chains?.[0] ?? BCH_TESTNET_CHAIN
+  const chainId = session.namespaces?.bch?.chains?.[0] ?? BCH_CHIPNET_CHAIN
+  
+  // Validate chain ID matches expected network
+  console.log('DEBUG: WalletConnect session chain ID:', chainId)
+  console.log('DEBUG: Expected chain IDs:', [BCH_CHIPNET_CHAIN, BCH_TESTNET_CHAIN, BCH_MAINNET_CHAIN])
+  
   try {
     const addresses = await client.request({
       chainId,
@@ -356,11 +361,15 @@ async function syncSessionToStore(store, client, session) {
       ? addresses[0]
       : null
     
+    console.log('DEBUG: Retrieved wallet address:', address)
+    
     // Try to extract public key from session accounts or request it
     let publicKey = null
     try {
       // Check if public key is in session accounts (format: "bch:chainId:address" or similar)
       const accounts = session.namespaces?.bch?.accounts ?? []
+      console.log('DEBUG: Session accounts:', accounts)
+      
       // Some wallets provide public key in account metadata
       if (accounts.length > 0 && accounts[0].includes(':')) {
         // Account format might contain public key info, but typically we need to request it
@@ -377,24 +386,63 @@ async function syncSessionToStore(store, client, session) {
         })
         if (pubKeyResult && typeof pubKeyResult === 'string') {
           publicKey = pubKeyResult
+          console.log('DEBUG: Retrieved public key from wallet')
         }
-      } catch {
+      } catch (pubKeyError) {
+        console.log('DEBUG: bch_getPublicKey not supported:', pubKeyError.message)
         // Method not supported - that's okay, we'll work with address only
       }
-    } catch {
+    } catch (error) {
+      console.warn('DEBUG: Public key extraction failed:', error.message)
       // Public key extraction failed - continue with address only
     }
     
     if (address) {
+      // Validate address format matches chain ID
+      const addressNetwork = inferNetworkFromAddress(address)
+      const expectedNetwork = getNetworkFromChainId(chainId)
+      
+      console.log('DEBUG: Address network inference:', addressNetwork)
+      console.log('DEBUG: Expected network from chain ID:', expectedNetwork)
+      
+      if (addressNetwork !== expectedNetwork) {
+        console.warn('DEBUG: Network mismatch detected', {
+          address,
+          addressNetwork,
+          expectedNetwork,
+          chainId
+        })
+      }
+      
       store.commit('wallet/SET_WALLET', {
         address,
         publicKey,
         privateKey: null,
       })
+      
+      console.log('DEBUG: Wallet state updated successfully')
+    } else {
+      console.warn('DEBUG: No address retrieved from wallet')
     }
   } catch (e) {
     console.warn('WalletConnect: could not get addresses', e)
   }
+}
+
+function inferNetworkFromAddress(address) {
+  if (typeof address !== 'string') return 'chipnet'
+  const prefix = address.includes(':') ? address.split(':')[0] : null
+  if (prefix === 'bitcoincash') return 'mainnet'
+  if (prefix === 'bchtest') return 'chipnet' // Assume chipnet for bchtest
+  if (prefix === 'chipnet') return 'chipnet'
+  return 'chipnet'
+}
+
+function getNetworkFromChainId(chainId) {
+  if (chainId === BCH_MAINNET_CHAIN) return 'mainnet'
+  if (chainId === BCH_CHIPNET_CHAIN) return 'chipnet'
+  if (chainId === BCH_TESTNET_CHAIN) return 'chipnet' // Map testnet to chipnet for our app
+  return 'chipnet'
 }
 
 async function restoreSessionIfAny(store) {

@@ -214,74 +214,10 @@
               :color="canWithdraw ? 'positive' : 'negative'"
             />
           </div>
-          <div>
-            <div class="text-subtitle2 q-mb-xs">Withdraw to (optional)</div>
-            <p class="text-caption text-grey-7 q-mb-sm">
-              Leave empty to use your connected wallet address, or paste / scan your Paytaca receive
-              address below.
-            </p>
-            <q-input
-              v-model="withdrawToAddress"
-              label="BCH address (paste or from QR)"
-              outlined
-              dense
-              placeholder="bitcoincash:... or bchtest:..."
-              class="monospace"
-              clearable
-              :rules="[(val) => !val || isValidBchAddress(val) || 'Invalid BCH address']"
-            />
-            <div class="row q-gutter-sm q-mt-sm flex-wrap">
-              <q-btn
-                flat
-                dense
-                color="primary"
-                icon="qr_code_scanner"
-                label="Scan with camera"
-                @click="openCameraScan"
-              />
-              <q-btn
-                flat
-                dense
-                color="primary"
-                icon="upload_file"
-                label="Upload QR image"
-                @click="triggerWithdrawQrInput"
-              />
-              <input
-                ref="withdrawQrInputRef"
-                type="file"
-                accept="image/*"
-                class="hidden"
-                @change="onWithdrawQrFile"
-              />
-            </div>
-            <q-dialog v-model="showCameraScan" persistent @hide="stopCamera">
-              <q-card style="min-width: 320px">
-                <q-card-section>
-                  <div class="text-h6">Scan Paytaca receive QR</div>
-                  <p class="text-caption text-grey-7">
-                    Point your laptop camera at the QR code on your Paytaca receive screen.
-                  </p>
-                </q-card-section>
-                <q-card-section class="flex flex-center">
-                  <video ref="cameraVideoRef" autoplay playsinline muted class="camera-video" />
-                </q-card-section>
-                <q-card-actions align="right">
-                  <q-btn
-                    flat
-                    label="Retry Permission"
-                    color="warning"
-                    @click="retryCameraPermission"
-                  />
-                  <q-btn flat label="Cancel" color="grey" v-close-popup />
-                </q-card-actions>
-              </q-card>
-            </q-dialog>
-          </div>
           <p class="text-caption text-grey-7">
-            Withdrawal sends vault funds to your chosen address (chipnet). Your Paytaca must approve
-            the transaction, like receiving from a faucet—you provide the address, then confirm in
-            the wallet.
+            Withdrawal sends vault funds to your original funding address automatically. Your
+            Paytaca must approve the transaction, like receiving from a faucet—you provide the
+            address, then confirm in wallet.
           </p>
           <q-btn
             color="primary"
@@ -393,6 +329,9 @@ export default defineComponent({
 
       // Withdraw destination (optional): from paste or QR scan/upload
       withdrawToAddress: '',
+
+      // Original funding address for auto-withdrawal
+      originalFundingAddress: '',
 
       // Live camera QR scan
       showCameraScan: false,
@@ -604,6 +543,7 @@ export default defineComponent({
           ownerPkhHex,
           oraclePkHex,
           contract, // Store contract instance for withdrawal
+          originalFundingAddress: this.walletAddress, // Store original funding address
         }
 
         // Persist vault so it survives refresh
@@ -614,6 +554,7 @@ export default defineComponent({
           priceTargetCents,
           ownerPkhHex,
           oraclePkHex,
+          originalFundingAddress: this.walletAddress, // Save original funding address
           createdAt: Date.now(),
         })
 
@@ -1044,24 +985,17 @@ export default defineComponent({
         return
       }
 
-      const customAddress = this.withdrawToAddress?.trim()
-      const ownerAddress = customAddress || wc.getAddress()
+      // Use original funding address automatically (no need to specify destination)
+      const ownerAddress = this.vault.originalFundingAddress || wc.getAddress()
       if (!ownerAddress) {
         this.$q.notify({ type: 'negative', message: 'Could not get wallet address' })
-        return
-      }
-      if (customAddress && !this.isValidBchAddress(customAddress)) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Invalid BCH address. Use a CashAddr (bitcoincash:, bchtest:, or chipnet:).',
-        })
         return
       }
 
       if (!this.oracleData.message_hex || !this.oracleData.signature_hex) {
         this.$q.notify({
           type: 'negative',
-          message: 'Oracle data missing. Refresh the price first.',
+          message: 'Oracle data missing. Refresh price first.',
         })
         return
       }
@@ -1071,7 +1005,6 @@ export default defineComponent({
         hasVault: !!this.vault,
         vaultAddress: this.vault.contractAddress,
         ownerAddress,
-        customAddress: customAddress || 'none',
         chainId: wc.getChainId(),
         hasPublicKey: !!wc.getOwnerPublicKeyHex(),
       })

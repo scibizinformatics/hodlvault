@@ -1,9 +1,7 @@
 <template>
   <q-page class="q-pa-md">
-    <div class="text-h4 q-mb-lg">HodlVault</div>
-
-    <!-- Oracle Price / Live Data -->
-    <q-card flat bordered class="q-mb-md" :class="{ 'border-positive': oracleSuccess }">
+    <!-- Oracle Status Section -->
+    <q-card flat bordered class="q-mb-md">
       <q-card-section class="row items-center q-gutter-md">
         <div v-if="priceLoading" class="row items-center q-gutter-sm">
           <q-spinner-dots color="primary" size="32px" />
@@ -14,7 +12,7 @@
           <div>
             <div class="text-subtitle1 text-weight-medium text-positive">Oracle data received</div>
             <div class="text-caption text-grey-7">
-              Current BCH price is live from the Oracle backend
+              Current BCH price is live from Oracle backend
             </div>
           </div>
           <q-btn
@@ -52,7 +50,7 @@
               (val) => val > 0 || 'Amount must be greater than 0',
               (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
             ]"
-            hint="This amount will be requested from your Paytaca wallet to fund the contract (in satoshis)."
+            hint="This amount will be requested from your Paytaca wallet to fund contract (in satoshis)."
           />
           <q-input
             v-model.number="form.priceTarget"
@@ -99,7 +97,7 @@
             <template v-slot:avatar>
               <q-spinner-dots color="white" size="24px" />
             </template>
-            Waiting for Deposit... Confirm the payment in your Paytaca wallet.
+            Waiting for Deposit... Confirm payment in your Paytaca wallet.
           </q-banner>
         </div>
       </q-card-section>
@@ -228,9 +226,8 @@
             @click="onWithdraw"
           />
           <div v-if="!canWithdraw && vault" class="text-caption text-negative q-mt-xs">
-            Current price (${{
-              currentBchPrice != null ? Number(currentBchPrice).toFixed(2) : '?'
-            }}) is below target price (${{ vault.priceTarget.toFixed(2) }})
+            Current price (${ currentBchPrice != null ? Number(currentBchPrice).toFixed(2) : '?' }})
+            is below target price (${{ vault.priceTarget.toFixed(2) }})
           </div>
         </div>
       </q-card-section>
@@ -281,15 +278,13 @@
 <script>
 import { defineComponent } from 'vue'
 import QrcodeVue from 'qrcode.vue'
-import jsQR from 'jsqr'
-import { Dialog } from 'quasar'
 import {
   calculateContractAddress,
   initializeHodlVaultContract,
   getAddressBalance,
-  spendVault,
   depositToVault,
 } from 'src/services/blockchain'
+import { simpleWithdrawal } from 'src/services/simple-withdrawal'
 import { fetchOraclePrice } from 'src/services/oracle'
 import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
 
@@ -327,16 +322,8 @@ export default defineComponent({
       // Vault persistence (localStorage)
       vaultPersistKey: 'hodl-vault-active-vault',
 
-      // Withdraw destination (optional): from paste or QR scan/upload
-      withdrawToAddress: '',
-
       // Original funding address for auto-withdrawal
       originalFundingAddress: '',
-
-      // Live camera QR scan
-      showCameraScan: false,
-      cameraStream: null,
-      cameraScanInterval: null,
 
       balanceRefreshing: false,
     }
@@ -429,73 +416,54 @@ export default defineComponent({
       }
     },
 
+    clearPersistedVaultState() {
+      if (typeof localStorage === 'undefined') return
+      try {
+        localStorage.removeItem(this.vaultPersistKey)
+      } catch {
+        // ignore persistence errors
+      }
+    },
+
     loadPersistedVaultState() {
       if (typeof localStorage === 'undefined') return null
       try {
-        const raw = localStorage.getItem(this.vaultPersistKey)
-        if (!raw) return null
-        const parsed = JSON.parse(raw)
-        if (!parsed || typeof parsed !== 'object') return null
-        return parsed
+        const stored = localStorage.getItem(this.vaultPersistKey)
+        return stored ? JSON.parse(stored) : null
       } catch {
         return null
       }
     },
 
-    clearPersistedVaultState() {
-      this.persistVaultState(null)
-    },
-
-    /**
-     * Get owner PKH derived from the connected/generated wallet's public key.
-     * Returns null if no wallet is connected or signer not set.
-     */
     getOwnerPkhHex() {
-      const ownerPkHex =
-        this.$store.state.wallet?.publicKey ?? this.$walletConnect?.getOwnerPublicKeyHex?.() ?? null
-      if (!ownerPkHex) return null
-      return this.derivePkhFromPublicKey(ownerPkHex)
-    },
-
-    /**
-     * Derive PKH from public key hex
-     * Note: In production, get public key from connected wallet
-     */
-    derivePkhFromPublicKey(publicKeyHex) {
-      try {
-        const publicKey = hexToBin(publicKeyHex)
-        const pkh = hash160(publicKey)
-        return binToHex(pkh)
-      } catch (error) {
-        console.error('Failed to derive PKH:', error)
-        return null
-      }
+      const addr = this.walletAddress
+      if (!addr) return ''
+      const hash = hash160(hexToBin(addr.slice(1)))
+      return binToHex(hash)
     },
 
     async refreshPrice() {
       this.priceLoading = true
       this.oracleSuccess = false
       try {
-        const data = await fetchOraclePrice()
-        this.currentBchPrice = data.price
+        const result = await fetchOraclePrice()
+        this.currentBchPrice = result.price
         this.oracleData = {
-          message_hex: data.message_hex,
-          signature_hex: data.signature_hex,
-          oracle_pubkey_hex: data.oracle_pubkey_hex,
+          message_hex: result.message_hex,
+          signature_hex: result.signature_hex,
+          oracle_pubkey_hex: result.oracle_pubkey_hex,
         }
         this.oracleSuccess = true
         this.$q.notify({
           type: 'positive',
-          message: 'Oracle data received successfully',
+          message: `Oracle price: $${result.price}`,
           icon: 'check_circle',
         })
       } catch (err) {
-        this.currentBchPrice = null
-        this.oracleData = { message_hex: '', signature_hex: '', oracle_pubkey_hex: '' }
+        console.error('Oracle fetch error:', err)
         this.$q.notify({
-          type: 'warning',
-          message: err?.message || 'Failed to fetch Oracle price',
-          icon: 'warning',
+          type: 'negative',
+          message: 'Failed to fetch Oracle price. Check backend is running.',
         })
       } finally {
         this.priceLoading = false
@@ -504,17 +472,18 @@ export default defineComponent({
 
     async onLockFunds() {
       if (!this.canLockFunds) return
-      const wc = this.$walletConnect
-      if (!wc || !wc.isConnected || !wc.isConnected()) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Please connect your wallet first',
-        })
-        return
-      }
 
       this.locking = true
       try {
+        const wc = this.$walletConnect
+        if (!wc || !wc.isConnected()) {
+          this.$q.notify({
+            type: 'negative',
+            message: 'Please connect your wallet first',
+          })
+          return
+        }
+
         const ownerPkhHex = this.getOwnerPkhHex()
         const oraclePkHex = this.oracleData.oracle_pubkey_hex
         const priceTargetCents = Math.floor(this.form.priceTarget * 100)
@@ -652,327 +621,6 @@ export default defineComponent({
       return /^(bitcoincash|bchtest|chipnet):[a-zA-Z0-9]+$/i.test(trimmed)
     },
 
-    triggerWithdrawQrInput() {
-      this.$refs.withdrawQrInputRef?.click()
-    },
-
-    openCameraScan() {
-      // First check if we can request camera permissions proactively
-      this.requestCameraPermissions()
-    },
-
-    async requestCameraPermissions() {
-      // Check browser support first
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Camera not supported in this browser. Please use Chrome, Firefox, or Edge.',
-          timeout: 5000,
-          actions: [
-            {
-              label: 'Upload QR',
-              color: 'white',
-              handler: () => this.triggerWithdrawQrInput(),
-            },
-          ],
-        })
-        return
-      }
-
-      // Check HTTPS requirement
-      if (
-        location.protocol !== 'https:' &&
-        location.hostname !== 'localhost' &&
-        location.hostname !== '127.0.0.1'
-      ) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Camera access requires HTTPS. Please use a secure connection.',
-          timeout: 5000,
-          actions: [
-            {
-              label: 'Upload QR',
-              color: 'white',
-              handler: () => this.triggerWithdrawQrInput(),
-            },
-          ],
-        })
-        return
-      }
-
-      // Show permission dialog before requesting camera
-      Dialog.create({
-        title: 'Camera Permission Required',
-        message:
-          'To scan QR codes for withdrawal, we need access to your camera. Please allow camera access when prompted.',
-        ok: {
-          label: 'Allow Camera',
-          color: 'primary',
-        },
-        cancel: {
-          label: 'Upload QR Instead',
-          color: 'grey',
-        },
-        persistent: true,
-      })
-        .onOk(() => {
-          this.showCameraScan = true
-          this.$nextTick(() => this.startCamera())
-        })
-        .onCancel(() => {
-          this.triggerWithdrawQrInput()
-        })
-    },
-
-    startCamera() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Camera not supported in this browser. Please use Chrome, Firefox, or Edge.',
-          timeout: 5000,
-        })
-        this.showCameraScan = false
-        return
-      }
-
-      // Check if we're on HTTPS (required for camera access)
-      if (
-        location.protocol !== 'https:' &&
-        location.hostname !== 'localhost' &&
-        location.hostname !== '127.0.0.1'
-      ) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Camera access requires HTTPS. Please use a secure connection.',
-          timeout: 5000,
-        })
-        this.showCameraScan = false
-        return
-      }
-
-      // Request camera permissions with better error handling
-      navigator.mediaDevices
-        .getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-          },
-        })
-        .then((stream) => {
-          this.cameraStream = stream
-          this.$nextTick(() => {
-            const video = this.$refs.cameraVideoRef
-            if (video) {
-              video.srcObject = stream
-              video.play().catch((playError) => {
-                console.warn('Video play failed:', playError)
-                this.$q.notify({
-                  type: 'warning',
-                  message: 'Camera started but video playback failed. Please try again.',
-                  timeout: 3000,
-                })
-              })
-              this.cameraScanInterval = setInterval(() => this.captureAndDecode(), 250)
-            }
-          })
-        })
-        .catch((err) => {
-          console.error('Camera access error:', err)
-
-          let errorMessage = 'Camera access denied or unavailable'
-          let detailedMessage = ''
-
-          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-            errorMessage = 'Camera permission denied'
-            detailedMessage =
-              'Please allow camera access in your browser settings and refresh the page.'
-          } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-            errorMessage = 'No camera found'
-            detailedMessage = 'Please connect a camera and try again.'
-          } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-            errorMessage = 'Camera is already in use'
-            detailedMessage = 'Please close other applications using the camera and try again.'
-          } else if (
-            err.name === 'OverconstrainedError' ||
-            err.name === 'ConstraintNotSatisfiedError'
-          ) {
-            errorMessage = 'Camera does not meet requirements'
-            detailedMessage =
-              'Your camera may not be compatible. Try using the upload QR option instead.'
-          } else if (err.name === 'SecurityError') {
-            errorMessage = 'Camera access blocked by security'
-            detailedMessage = 'Please ensure you are on HTTPS or localhost and try again.'
-          }
-
-          this.$q.notify({
-            type: 'negative',
-            message: errorMessage,
-            caption: detailedMessage,
-            timeout: 6000,
-            actions: [
-              {
-                label: 'Upload QR',
-                color: 'white',
-                handler: () => {
-                  this.showCameraScan = false
-                  this.$nextTick(() => {
-                    this.triggerWithdrawQrInput()
-                  })
-                },
-              },
-            ],
-          })
-          this.showCameraScan = false
-        })
-    },
-
-    stopCamera() {
-      if (this.cameraScanInterval) {
-        clearInterval(this.cameraScanInterval)
-        this.cameraScanInterval = null
-      }
-      if (this.cameraStream) {
-        this.cameraStream.getTracks().forEach((track) => track.stop())
-        this.cameraStream = null
-      }
-      const video = this.$refs.cameraVideoRef
-      if (video && video.srcObject) {
-        video.srcObject = null
-      }
-    },
-
-    retryCameraPermission() {
-      Dialog.create({
-        title: 'Camera Permission Help',
-        message: `
-          <div style="text-align: left;">
-            <p><strong>If camera permission was denied:</strong></p>
-            <ol>
-              <li>Click the camera icon 📷 in your browser's address bar</li>
-              <li>Select "Allow" for camera access</li>
-              <li>Refresh the page and try again</li>
-            </ol>
-            <p><strong>Or use the upload option:</strong></p>
-            <ul>
-              <li>Take a screenshot of the QR code</li>
-              <li>Click "Upload QR image" to select it</li>
-            </ul>
-          </div>
-        `,
-        html: true,
-        ok: {
-          label: 'Try Again',
-          color: 'primary',
-        },
-        cancel: {
-          label: 'Upload QR',
-          color: 'secondary',
-        },
-      })
-        .onOk(() => {
-          this.showCameraScan = true
-          this.$nextTick(() => this.startCamera())
-        })
-        .onCancel(() => {
-          this.triggerWithdrawQrInput()
-        })
-    },
-
-    captureAndDecode() {
-      const video = this.$refs.cameraVideoRef
-      if (!video || !video.videoWidth || video.readyState < 2) return
-      const canvas = document.createElement('canvas')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      ctx.drawImage(video, 0, 0)
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const code = jsQR(imageData.data, imageData.width, imageData.height)
-      if (code && code.data) {
-        const address = this.extractBchAddressFromQrData(code.data)
-        if (address) {
-          this.withdrawToAddress = address
-          this.$q.notify({
-            type: 'positive',
-            message: 'Address scanned! Initiating withdrawal...',
-            icon: 'check_circle',
-          })
-          this.stopCamera()
-          this.showCameraScan = false
-          // Trigger immediate withdrawal after successful scan
-          setTimeout(() => {
-            this.onWithdraw()
-          }, 1000)
-        }
-      }
-    },
-
-    onWithdrawQrFile(event) {
-      const file = event.target?.files?.[0]
-      if (!file || !file.type.startsWith('image/')) {
-        this.$q.notify({
-          type: 'warning',
-          message: 'Please choose an image file (e.g. Paytaca receive QR screenshot)',
-        })
-        event.target.value = ''
-        return
-      }
-      const img = new Image()
-      const url = URL.createObjectURL(file)
-      img.onload = () => {
-        URL.revokeObjectURL(url)
-        const canvas = document.createElement('canvas')
-        canvas.width = img.width
-        canvas.height = img.height
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          this.$q.notify({ type: 'negative', message: 'Could not read image' })
-          event.target.value = ''
-          return
-        }
-        ctx.drawImage(img, 0, 0)
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const code = jsQR(imageData.data, imageData.width, imageData.height)
-        if (!code || !code.data) {
-          this.$q.notify({ type: 'warning', message: 'No QR code found in image' })
-          event.target.value = ''
-          return
-        }
-        const address = this.extractBchAddressFromQrData(code.data)
-        if (address) {
-          this.withdrawToAddress = address
-          this.$q.notify({
-            type: 'positive',
-            message: 'Address read from QR! Initiating withdrawal...',
-            icon: 'check_circle',
-          })
-          // Trigger immediate withdrawal after successful QR upload
-          setTimeout(() => {
-            this.onWithdraw()
-          }, 1000)
-        } else {
-          this.$q.notify({ type: 'warning', message: 'QR code does not contain a BCH address' })
-        }
-        event.target.value = ''
-      }
-      img.onerror = () => {
-        URL.revokeObjectURL(url)
-        this.$q.notify({ type: 'negative', message: 'Failed to load image' })
-        event.target.value = ''
-      }
-      img.src = url
-    },
-
-    /** Extract BCH CashAddr from Paytaca-style receive QR data (e.g. "bitcoincash:qp3d...?amount=0.01") */
-    extractBchAddressFromQrData(data) {
-      if (!data || typeof data !== 'string') return null
-      const withoutQuery = data.trim().split('?')[0].trim()
-      const match = withoutQuery.match(/^(bitcoincash|bchtest|chipnet):[a-zA-Z0-9]+$/i)
-      return match ? match[0] : null
-    },
-
     async onWithdraw() {
       if (!this.canWithdraw || !this.vault) return
 
@@ -985,7 +633,7 @@ export default defineComponent({
         return
       }
 
-      // Use original funding address automatically (no need to specify destination)
+      // Use original funding address automatically
       const ownerAddress = this.vault.originalFundingAddress || wc.getAddress()
       if (!ownerAddress) {
         this.$q.notify({ type: 'negative', message: 'Could not get wallet address' })
@@ -1000,126 +648,41 @@ export default defineComponent({
         return
       }
 
-      // Enhanced debugging
-      console.log('DEBUG: Withdrawal initiated', {
-        hasVault: !!this.vault,
-        vaultAddress: this.vault.contractAddress,
-        ownerAddress,
-        chainId: wc.getChainId(),
-        hasPublicKey: !!wc.getOwnerPublicKeyHex(),
-      })
-
-      const ownerSigTemplate = wc.getSignatureTemplate()
-      const useWalletConnectSign = !ownerSigTemplate && typeof wc.request === 'function'
-
-      console.log('DEBUG: Signing method selection', {
-        hasSignatureTemplate: !!ownerSigTemplate,
-        useWalletConnectSign,
-        hasRequestFunction: typeof wc.request === 'function',
-      })
-
       this.withdrawing = true
       try {
-        const withdrawPromise = spendVault(this.vault.contract, {
-          ownerPkHex: wc.getOwnerPublicKeyHex() || '',
-          ownerSigTemplate: ownerSigTemplate || undefined,
-          oracleMessageHex: this.oracleData.message_hex,
-          oracleSigHex: this.oracleData.signature_hex,
-          ownerAddress,
-          ...(useWalletConnectSign && {
-            walletConnectRequest: (method, params) => {
-              console.log('DEBUG: WalletConnect request:', method, params)
-              return wc.request(method, params)
-            },
-          }),
+        console.log('Simple withdrawal:', {
+          from: this.vault.contractAddress,
+          to: ownerAddress,
+          oracleMessage: this.oracleData.message_hex ? 'present' : 'missing',
+          oracleSig: this.oracleData.signature_hex ? 'present' : 'missing',
         })
 
-        const result = await Promise.race([
-          withdrawPromise,
-          new Promise(
-            (resolve) => setTimeout(() => resolve({ txid: null, timeout: true }), 30000), // Increased timeout
-          ),
-        ])
-
-        if (result && result.timeout) {
-          this.$q.notify({
-            type: 'warning',
-            message:
-              'Withdrawal request timed out waiting for wallet. Please check Paytaca for any pending or sent transaction.',
-          })
-          return
-        }
-
-        if (result && result.success && !result.txid) {
-          this.$q.notify({
-            type: 'info',
-            message:
-              'Withdrawal processed by wallet but transaction ID not available. Please check your wallet for transaction status.',
-            icon: 'info',
-          })
-          await this.refreshVaultBalance()
-          return
-        }
+        const result = await simpleWithdrawal(
+          this.vault.contract,
+          ownerAddress,
+          this.oracleData.message_hex,
+          this.oracleData.signature_hex,
+          wc.getOwnerPublicKeyHex() || '',
+          (method, params) => wc.request(method, params),
+        )
 
         this.$q.notify({
           type: 'positive',
-          message: `Withdrawal sent. TX: ${result.txid}`,
+          message: result?.txid
+            ? `Withdrawal sent. TX: ${result.txid}`
+            : 'Withdrawal processed successfully!',
           icon: 'check_circle',
         })
         await this.refreshVaultBalance()
       } catch (err) {
-        console.error('DEBUG: Withdrawal error details:', {
-          message: err?.message,
-          code: err?.code,
-          data: err?.data,
-          stack: err?.stack,
+        console.error('Withdrawal failed:', err)
+        this.$q.notify({
+          type: 'negative',
+          message: err?.message || 'Failed to withdraw',
         })
-
-        const msg = err?.message || 'Failed to withdraw'
-        const isInternal = msg.includes('Internal error') || err?.code === -32603
-
-        if (isInternal) {
-          // Try to provide more specific guidance
-          const enhancedMessage = this.getEnhancedErrorMessage(err)
-          this.$q.notify({
-            type: 'negative',
-            message: enhancedMessage,
-            timeout: 10000, // Longer timeout for complex message
-          })
-        } else {
-          this.$q.notify({
-            type: 'negative',
-            message: msg,
-          })
-        }
       } finally {
         this.withdrawing = false
       }
-    },
-
-    getEnhancedErrorMessage(err) {
-      const baseMessage = 'Wallet could not sign the withdrawal (internal error).'
-
-      const suggestions = [
-        'Try ensuring Paytaca is updated and you are on the correct network (chipnet).',
-        'Check that Paytaca has sufficient BCH for fees.',
-        'Try restarting Paytaca and reconnecting the wallet.',
-        'Verify the vault has sufficient balance for withdrawal.',
-        'Check browser console for detailed debug information.',
-      ]
-
-      // Add specific suggestions based on error details
-      if (err?.code === -32603) {
-        suggestions.push(
-          'This is a JSON-RPC internal error. The wallet may not support this transaction type.',
-        )
-      }
-
-      if (err?.message?.includes('timeout')) {
-        suggestions.push('The request timed out. Try again with a better network connection.')
-      }
-
-      return baseMessage + '\n\nPossible solutions:\n• ' + suggestions.join('\n• ')
     },
 
     async onDepositMore() {
@@ -1310,36 +873,12 @@ export default defineComponent({
   },
 
   beforeUnmount() {
-    this.stopCamera()
     if (this.balanceInterval) {
       clearInterval(this.balanceInterval)
     }
     if (this.depositPollInterval) {
       clearInterval(this.depositPollInterval)
-      this.depositPollInterval = null
     }
   },
 })
 </script>
-
-<style scoped lang="scss">
-.monospace {
-  font-family: ui-monospace, monospace;
-}
-.text-select {
-  user-select: all;
-}
-.border-positive {
-  border: 2px solid var(--q-positive);
-}
-.hidden {
-  display: none !important;
-}
-.camera-video {
-  width: 100%;
-  max-width: 320px;
-  max-height: 240px;
-  object-fit: cover;
-  background: #000;
-}
-</style>

@@ -13,13 +13,26 @@
           <q-icon name="check_circle" color="positive" size="32px" />
           <div>
             <div class="text-subtitle1 text-weight-medium text-positive">Oracle data received</div>
-            <div class="text-caption text-grey-7">Current BCH price is live from the Oracle backend</div>
+            <div class="text-caption text-grey-7">
+              Current BCH price is live from the Oracle backend
+            </div>
           </div>
-          <q-btn flat dense round icon="refresh" @click="refreshPrice" label="Refresh" class="q-ml-auto" />
+          <q-btn
+            flat
+            dense
+            round
+            icon="refresh"
+            @click="refreshPrice"
+            label="Refresh"
+            class="q-ml-auto"
+          />
         </div>
         <div v-else class="row items-center q-gutter-sm">
           <q-icon name="warning" color="orange" size="32px" />
-          <span>Oracle price unavailable. Check that the backend is running at http://127.0.0.1:8000</span>
+          <span
+            >Oracle price unavailable. Check that the backend is running at
+            http://127.0.0.1:8000</span
+          >
           <q-btn flat dense label="Retry" @click="refreshPrice" />
         </div>
       </q-card-section>
@@ -47,9 +60,7 @@
             type="number"
             outlined
             step="0.01"
-            :rules="[
-              (val) => val > 0 || 'Price target must be greater than 0',
-            ]"
+            :rules="[(val) => val > 0 || 'Price target must be greater than 0']"
             hint="Target BCH/USD price to unlock funds"
           />
           <q-btn
@@ -133,7 +144,8 @@
               />
             </div>
             <p class="text-caption text-grey-7 q-mt-xs q-mb-none">
-              Live from chipnet blockchain. Clearing site data does not move funds—your vault address stays the same; re-enter the same vault settings to see this balance again.
+              Live from chipnet blockchain. Clearing site data does not move funds—your vault
+              address stays the same; re-enter the same vault settings to see this balance again.
             </p>
             <a
               v-if="vault && vault.contractAddress"
@@ -181,24 +193,21 @@
                 <QrcodeVue :value="vault.contractAddress" :size="160" />
               </q-card>
               <div class="text-body2 text-grey-7">
-                Scan this QR in Paytaca to fill the vault address automatically, then
-                enter the amount you want to send.
+                Scan this QR in Paytaca to fill the vault address automatically, then enter the
+                amount you want to send.
               </div>
             </div>
           </div>
           <div>
             <div class="text-subtitle2 q-mb-xs">Target Price</div>
-            <q-input
-              :model-value="`$${vault.priceTarget.toFixed(2)}`"
-              readonly
-              outlined
-              dense
-            />
+            <q-input :model-value="`$${vault.priceTarget.toFixed(2)}`" readonly outlined dense />
           </div>
           <div>
             <div class="text-subtitle2 q-mb-xs">Current BCH Price (Oracle)</div>
             <q-input
-              :model-value="currentBchPrice != null ? `$${Number(currentBchPrice).toFixed(2)}` : '—'"
+              :model-value="
+                currentBchPrice != null ? `$${Number(currentBchPrice).toFixed(2)}` : '—'
+              "
               readonly
               outlined
               dense
@@ -208,7 +217,8 @@
           <div>
             <div class="text-subtitle2 q-mb-xs">Withdraw to (optional)</div>
             <p class="text-caption text-grey-7 q-mb-sm">
-              Leave empty to use your connected wallet address, or paste / scan your Paytaca receive address below.
+              Leave empty to use your connected wallet address, or paste / scan your Paytaca receive
+              address below.
             </p>
             <q-input
               v-model="withdrawToAddress"
@@ -218,7 +228,7 @@
               placeholder="bitcoincash:... or bchtest:..."
               class="monospace"
               clearable
-              :rules="[ (val) => !val || isValidBchAddress(val) || 'Invalid BCH address' ]"
+              :rules="[(val) => !val || isValidBchAddress(val) || 'Invalid BCH address']"
             />
             <div class="row q-gutter-sm q-mt-sm flex-wrap">
               <q-btn
@@ -249,25 +259,29 @@
               <q-card style="min-width: 320px">
                 <q-card-section>
                   <div class="text-h6">Scan Paytaca receive QR</div>
-                  <p class="text-caption text-grey-7">Point your laptop camera at the QR code on your Paytaca receive screen.</p>
+                  <p class="text-caption text-grey-7">
+                    Point your laptop camera at the QR code on your Paytaca receive screen.
+                  </p>
                 </q-card-section>
                 <q-card-section class="flex flex-center">
-                  <video
-                    ref="cameraVideoRef"
-                    autoplay
-                    playsinline
-                    muted
-                    class="camera-video"
-                  />
+                  <video ref="cameraVideoRef" autoplay playsinline muted class="camera-video" />
                 </q-card-section>
                 <q-card-actions align="right">
+                  <q-btn
+                    flat
+                    label="Retry Permission"
+                    color="warning"
+                    @click="retryCameraPermission"
+                  />
                   <q-btn flat label="Cancel" color="grey" v-close-popup />
                 </q-card-actions>
               </q-card>
             </q-dialog>
           </div>
           <p class="text-caption text-grey-7">
-            Withdrawal sends vault funds to your chosen address (chipnet). Your Paytaca must approve the transaction, like receiving from a faucet—you provide the address, then confirm in the wallet.
+            Withdrawal sends vault funds to your chosen address (chipnet). Your Paytaca must approve
+            the transaction, like receiving from a faucet—you provide the address, then confirm in
+            the wallet.
           </p>
           <q-btn
             color="primary"
@@ -278,7 +292,9 @@
             @click="onWithdraw"
           />
           <div v-if="!canWithdraw && vault" class="text-caption text-negative q-mt-xs">
-            Current price (${{ currentBchPrice != null ? Number(currentBchPrice).toFixed(2) : '?' }}) is below target price (${{ vault.priceTarget.toFixed(2) }})
+            Current price (${{
+              currentBchPrice != null ? Number(currentBchPrice).toFixed(2) : '?'
+            }}) is below target price (${{ vault.priceTarget.toFixed(2) }})
           </div>
         </div>
       </q-card-section>
@@ -330,6 +346,7 @@
 import { defineComponent } from 'vue'
 import QrcodeVue from 'qrcode.vue'
 import jsQR from 'jsqr'
+import { Dialog } from 'quasar'
 import {
   calculateContractAddress,
   initializeHodlVaultContract,
@@ -495,7 +512,8 @@ export default defineComponent({
      * Returns null if no wallet is connected or signer not set.
      */
     getOwnerPkhHex() {
-      const ownerPkHex = this.$store.state.wallet?.publicKey ?? this.$walletConnect?.getOwnerPublicKeyHex?.() ?? null
+      const ownerPkHex =
+        this.$store.state.wallet?.publicKey ?? this.$walletConnect?.getOwnerPublicKeyHex?.() ?? null
       if (!ownerPkHex) return null
       return this.derivePkhFromPublicKey(ownerPkHex)
     },
@@ -569,14 +587,10 @@ export default defineComponent({
         const contractAddress = await calculateContractAddress(
           ownerPkhHex,
           oraclePkHex,
-          priceTargetCents
+          priceTargetCents,
         )
 
-        const contract = initializeHodlVaultContract(
-          ownerPkhHex,
-          oraclePkHex,
-          priceTargetCents
-        )
+        const contract = initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTargetCents)
 
         // Get initial balance (should be 0 for new contract)
         const balance = Number(await getAddressBalance(contractAddress))
@@ -622,13 +636,11 @@ export default defineComponent({
             const depositPromise = depositToVault(
               contractAddress,
               this.form.amount,
-              (method, params) => wc.request(method, params)
+              (method, params) => wc.request(method, params),
             )
             const depositResult = await Promise.race([
               depositPromise,
-              new Promise((resolve) =>
-                setTimeout(() => resolve({ txid: null, raw: null }), 20000)
-              ),
+              new Promise((resolve) => setTimeout(() => resolve({ txid: null, raw: null }), 20000)),
             ])
             const txid = depositResult && depositResult.txid
             this.$q.notify({
@@ -704,33 +716,171 @@ export default defineComponent({
     },
 
     openCameraScan() {
-      this.showCameraScan = true
-      this.$nextTick(() => this.startCamera())
+      // First check if we can request camera permissions proactively
+      this.requestCameraPermissions()
+    },
+
+    async requestCameraPermissions() {
+      // Check browser support first
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.$q.notify({
+          type: 'negative',
+          message: 'Camera not supported in this browser. Please use Chrome, Firefox, or Edge.',
+          timeout: 5000,
+          actions: [
+            {
+              label: 'Upload QR',
+              color: 'white',
+              handler: () => this.triggerWithdrawQrInput(),
+            },
+          ],
+        })
+        return
+      }
+
+      // Check HTTPS requirement
+      if (
+        location.protocol !== 'https:' &&
+        location.hostname !== 'localhost' &&
+        location.hostname !== '127.0.0.1'
+      ) {
+        this.$q.notify({
+          type: 'negative',
+          message: 'Camera access requires HTTPS. Please use a secure connection.',
+          timeout: 5000,
+          actions: [
+            {
+              label: 'Upload QR',
+              color: 'white',
+              handler: () => this.triggerWithdrawQrInput(),
+            },
+          ],
+        })
+        return
+      }
+
+      // Show permission dialog before requesting camera
+      Dialog.create({
+        title: 'Camera Permission Required',
+        message:
+          'To scan QR codes for withdrawal, we need access to your camera. Please allow camera access when prompted.',
+        ok: {
+          label: 'Allow Camera',
+          color: 'primary',
+        },
+        cancel: {
+          label: 'Upload QR Instead',
+          color: 'grey',
+        },
+        persistent: true,
+      })
+        .onOk(() => {
+          this.showCameraScan = true
+          this.$nextTick(() => this.startCamera())
+        })
+        .onCancel(() => {
+          this.triggerWithdrawQrInput()
+        })
     },
 
     startCamera() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        this.$q.notify({ type: 'negative', message: 'Camera not supported in this browser' })
+        this.$q.notify({
+          type: 'negative',
+          message: 'Camera not supported in this browser. Please use Chrome, Firefox, or Edge.',
+          timeout: 5000,
+        })
         this.showCameraScan = false
         return
       }
+
+      // Check if we're on HTTPS (required for camera access)
+      if (
+        location.protocol !== 'https:' &&
+        location.hostname !== 'localhost' &&
+        location.hostname !== '127.0.0.1'
+      ) {
+        this.$q.notify({
+          type: 'negative',
+          message: 'Camera access requires HTTPS. Please use a secure connection.',
+          timeout: 5000,
+        })
+        this.showCameraScan = false
+        return
+      }
+
+      // Request camera permissions with better error handling
       navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: 'environment' } })
+        .getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+        })
         .then((stream) => {
           this.cameraStream = stream
           this.$nextTick(() => {
             const video = this.$refs.cameraVideoRef
             if (video) {
               video.srcObject = stream
-              video.play().catch(() => {})
+              video.play().catch((playError) => {
+                console.warn('Video play failed:', playError)
+                this.$q.notify({
+                  type: 'warning',
+                  message: 'Camera started but video playback failed. Please try again.',
+                  timeout: 3000,
+                })
+              })
               this.cameraScanInterval = setInterval(() => this.captureAndDecode(), 250)
             }
           })
         })
         .catch((err) => {
+          console.error('Camera access error:', err)
+
+          let errorMessage = 'Camera access denied or unavailable'
+          let detailedMessage = ''
+
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            errorMessage = 'Camera permission denied'
+            detailedMessage =
+              'Please allow camera access in your browser settings and refresh the page.'
+          } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+            errorMessage = 'No camera found'
+            detailedMessage = 'Please connect a camera and try again.'
+          } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            errorMessage = 'Camera is already in use'
+            detailedMessage = 'Please close other applications using the camera and try again.'
+          } else if (
+            err.name === 'OverconstrainedError' ||
+            err.name === 'ConstraintNotSatisfiedError'
+          ) {
+            errorMessage = 'Camera does not meet requirements'
+            detailedMessage =
+              'Your camera may not be compatible. Try using the upload QR option instead.'
+          } else if (err.name === 'SecurityError') {
+            errorMessage = 'Camera access blocked by security'
+            detailedMessage = 'Please ensure you are on HTTPS or localhost and try again.'
+          }
+
           this.$q.notify({
             type: 'negative',
-            message: err?.message || 'Camera access denied or unavailable',
+            message: errorMessage,
+            caption: detailedMessage,
+            timeout: 6000,
+            actions: [
+              {
+                label: 'Upload QR',
+                color: 'white',
+                handler: () => {
+                  this.showCameraScan = false
+                  this.$nextTick(() => {
+                    this.triggerWithdrawQrInput()
+                  })
+                },
+              },
+            ],
           })
           this.showCameraScan = false
         })
@@ -742,13 +892,50 @@ export default defineComponent({
         this.cameraScanInterval = null
       }
       if (this.cameraStream) {
-        this.cameraStream.getTracks().forEach((t) => t.stop())
+        this.cameraStream.getTracks().forEach((track) => track.stop())
         this.cameraStream = null
       }
       const video = this.$refs.cameraVideoRef
       if (video && video.srcObject) {
         video.srcObject = null
       }
+    },
+
+    retryCameraPermission() {
+      Dialog.create({
+        title: 'Camera Permission Help',
+        message: `
+          <div style="text-align: left;">
+            <p><strong>If camera permission was denied:</strong></p>
+            <ol>
+              <li>Click the camera icon 📷 in your browser's address bar</li>
+              <li>Select "Allow" for camera access</li>
+              <li>Refresh the page and try again</li>
+            </ol>
+            <p><strong>Or use the upload option:</strong></p>
+            <ul>
+              <li>Take a screenshot of the QR code</li>
+              <li>Click "Upload QR image" to select it</li>
+            </ul>
+          </div>
+        `,
+        html: true,
+        ok: {
+          label: 'Try Again',
+          color: 'primary',
+        },
+        cancel: {
+          label: 'Upload QR',
+          color: 'secondary',
+        },
+      })
+        .onOk(() => {
+          this.showCameraScan = true
+          this.$nextTick(() => this.startCamera())
+        })
+        .onCancel(() => {
+          this.triggerWithdrawQrInput()
+        })
     },
 
     captureAndDecode() {
@@ -766,9 +953,17 @@ export default defineComponent({
         const address = this.extractBchAddressFromQrData(code.data)
         if (address) {
           this.withdrawToAddress = address
-          this.$q.notify({ type: 'positive', message: 'Address scanned', icon: 'check_circle' })
+          this.$q.notify({
+            type: 'positive',
+            message: 'Address scanned! Initiating withdrawal...',
+            icon: 'check_circle',
+          })
           this.stopCamera()
           this.showCameraScan = false
+          // Trigger immediate withdrawal after successful scan
+          setTimeout(() => {
+            this.onWithdraw()
+          }, 1000)
         }
       }
     },
@@ -776,7 +971,10 @@ export default defineComponent({
     onWithdrawQrFile(event) {
       const file = event.target?.files?.[0]
       if (!file || !file.type.startsWith('image/')) {
-        this.$q.notify({ type: 'warning', message: 'Please choose an image file (e.g. Paytaca receive QR screenshot)' })
+        this.$q.notify({
+          type: 'warning',
+          message: 'Please choose an image file (e.g. Paytaca receive QR screenshot)',
+        })
         event.target.value = ''
         return
       }
@@ -804,7 +1002,15 @@ export default defineComponent({
         const address = this.extractBchAddressFromQrData(code.data)
         if (address) {
           this.withdrawToAddress = address
-          this.$q.notify({ type: 'positive', message: 'Address read from QR', icon: 'check_circle' })
+          this.$q.notify({
+            type: 'positive',
+            message: 'Address read from QR! Initiating withdrawal...',
+            icon: 'check_circle',
+          })
+          // Trigger immediate withdrawal after successful QR upload
+          setTimeout(() => {
+            this.onWithdraw()
+          }, 1000)
         } else {
           this.$q.notify({ type: 'warning', message: 'QR code does not contain a BCH address' })
         }
@@ -845,7 +1051,10 @@ export default defineComponent({
         return
       }
       if (customAddress && !this.isValidBchAddress(customAddress)) {
-        this.$q.notify({ type: 'negative', message: 'Invalid BCH address. Use a CashAddr (bitcoincash:, bchtest:, or chipnet:).' })
+        this.$q.notify({
+          type: 'negative',
+          message: 'Invalid BCH address. Use a CashAddr (bitcoincash:, bchtest:, or chipnet:).',
+        })
         return
       }
 
@@ -894,8 +1103,8 @@ export default defineComponent({
 
         const result = await Promise.race([
           withdrawPromise,
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ txid: null, timeout: true }), 30000) // Increased timeout
+          new Promise(
+            (resolve) => setTimeout(() => resolve({ txid: null, timeout: true }), 30000), // Increased timeout
           ),
         ])
 
@@ -934,8 +1143,8 @@ export default defineComponent({
         })
 
         const msg = err?.message || 'Failed to withdraw'
-        const isInternal = msg.includes('Internal error') || (err?.code === -32603)
-        
+        const isInternal = msg.includes('Internal error') || err?.code === -32603
+
         if (isInternal) {
           // Try to provide more specific guidance
           const enhancedMessage = this.getEnhancedErrorMessage(err)
@@ -957,7 +1166,7 @@ export default defineComponent({
 
     getEnhancedErrorMessage(err) {
       const baseMessage = 'Wallet could not sign the withdrawal (internal error).'
-      
+
       const suggestions = [
         'Try ensuring Paytaca is updated and you are on the correct network (chipnet).',
         'Check that Paytaca has sufficient BCH for fees.',
@@ -965,16 +1174,18 @@ export default defineComponent({
         'Verify the vault has sufficient balance for withdrawal.',
         'Check browser console for detailed debug information.',
       ]
-      
+
       // Add specific suggestions based on error details
       if (err?.code === -32603) {
-        suggestions.push('This is a JSON-RPC internal error. The wallet may not support this transaction type.')
+        suggestions.push(
+          'This is a JSON-RPC internal error. The wallet may not support this transaction type.',
+        )
       }
-      
+
       if (err?.message?.includes('timeout')) {
         suggestions.push('The request timed out. Try again with a better network connection.')
       }
-      
+
       return baseMessage + '\n\nPossible solutions:\n• ' + suggestions.join('\n• ')
     },
 
@@ -1009,13 +1220,11 @@ export default defineComponent({
         const depositPromise = depositToVault(
           this.vault.contractAddress,
           this.additionalDepositAmount,
-          (method, params) => wc.request(method, params)
+          (method, params) => wc.request(method, params),
         )
         const depositResult = await Promise.race([
           depositPromise,
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ txid: null, raw: null }), 20000)
-          ),
+          new Promise((resolve) => setTimeout(() => resolve({ txid: null, raw: null }), 20000)),
         ])
         const txid = depositResult && depositResult.txid
         this.$q.notify({
@@ -1145,7 +1354,7 @@ export default defineComponent({
         const contract = initializeHodlVaultContract(
           persisted.ownerPkhHex,
           persisted.oraclePkHex,
-          persisted.priceTargetCents
+          persisted.priceTargetCents,
         )
         this.vault = {
           contractAddress: persisted.contractAddress,

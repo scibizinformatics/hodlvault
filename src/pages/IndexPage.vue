@@ -1,6 +1,6 @@
 <template>
   <q-page class="flex flex-center column q-pa-md">
-    <div class="text-h5 q-mb-md">BCH HodlVault v2.1.1</div>
+    <div class="text-h5 q-mb-md">BCH HodlVault v4.0.0</div>
 
     <!-- Connect Paytaca (WalletConnect) -->
     <q-card flat bordered class="wallet-card q-pa-lg">
@@ -26,13 +26,7 @@
             input-class="text-select"
             style="min-width: 300px"
           />
-          <q-btn
-            flat
-            dense
-            color="negative"
-            label="Disconnect"
-            @click="onDisconnectWallet"
-          />
+          <q-btn flat dense color="negative" label="Disconnect" @click="onDisconnectWallet" />
         </div>
       </q-card-section>
     </q-card>

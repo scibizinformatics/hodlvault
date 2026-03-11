@@ -1,15 +1,16 @@
 /**
- * Service to interact with the Django HodlVault Oracle
+ * Service to interact with Oracles.cash Production Oracle
  */
 
 export async function fetchOraclePrice() {
-  // Use 127.0.0.1 to match your Django server's running address
-  const ORACLE_URL = 'http://127.0.0.1:8000/api/price/'
+  // Oracles.cash Production API
+  const ORACLE_URL = 'https://oracle1.mainnet.cash/api/v1/price/bch-usd'
+  const ORACLE_PUBKEY = '02d09613d20ce44da55956799863c0a5e82c5896a2df33502b4859664650529d2f'
 
   try {
     // Add timeout and better headers
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout for external API
 
     const response = await fetch(ORACLE_URL, {
       method: 'GET',
@@ -43,22 +44,23 @@ export async function fetchOraclePrice() {
       throw new Error('Invalid JSON response from oracle server')
     }
 
-    // Validate required fields
-    if (!data.price_usd || !data.message_hex || !data.signature_hex || !data.oracle_pubkey_hex) {
+    // Validate required fields from Oracles.cash API
+    if (!data.price || !data.message || !data.signature) {
       console.error('Invalid oracle data structure:', data)
       throw new Error('Oracle response missing required fields')
     }
 
-    // Map the Django API response to the format the Quasar UI expects
+    // Map Oracles.cash API response to the format the UI expects
     return {
-      price: parseFloat(data.price_usd),
-      message_hex: data.message_hex,
-      signature_hex: data.signature_hex,
-      oracle_pubkey_hex: data.oracle_pubkey_hex,
-      status: data.status || 'success',
+      price: parseFloat(data.price),
+      message_hex: data.message,
+      signature_hex: data.signature,
+      oracle_pubkey_hex: ORACLE_PUBKEY,
+      status: 'success',
+      source: 'oracles.cash',
     }
   } catch (error) {
-    console.error('Connection to Oracle failed:', error)
+    console.error('Connection to Oracles.cash failed:', error)
 
     // Provide fallback data when oracle is unavailable
     if (error.name === 'AbortError') {
@@ -73,8 +75,9 @@ export async function fetchOraclePrice() {
       message_hex: '0000000000007530',
       signature_hex:
         '3044022044f7d0438553f6fb52be62a94e6d676c6d47536f6a101f51f76257931db14030022009073ba73e721684db25397e73d6c210',
-      oracle_pubkey_hex: '03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd',
+      oracle_pubkey_hex: ORACLE_PUBKEY,
       status: 'fallback',
+      source: 'fallback',
     }
   }
 }

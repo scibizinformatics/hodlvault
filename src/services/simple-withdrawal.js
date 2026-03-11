@@ -2,7 +2,23 @@
  * Simple withdrawal - send vault balance back to original funding address
  */
 
-import { hexToBin } from '@bitauth/libauth'
+import { hexToBin, binToHex } from '@bitauth/libauth'
+
+/**
+ * Serialize object for JSON RPC (BigInt → string, Uint8Array → hex)
+ */
+function serializeForWc(obj) {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'bigint') return obj.toString()
+  if (obj instanceof Uint8Array) return binToHex(obj)
+  if (Array.isArray(obj)) return obj.map(serializeForWc)
+  if (typeof obj === 'object') {
+    const out = {}
+    for (const k of Object.keys(obj)) out[k] = serializeForWc(obj[k])
+    return out
+  }
+  return obj
+}
 
 /**
  * Simple withdrawal - just send vault balance back to original funding address
@@ -46,19 +62,17 @@ export async function simpleWithdrawal(
     const oracleMessage = hexToBin(oracleMessageHex)
     const oracleSig = hexToBin(oracleSigHex)
 
-    // Create proper signature template for WalletConnect
-    const ownerSigTemplate = {
-      signature: new Uint8Array(64), // Placeholder 64-byte signature
-      publicKey: hexToBin(ownerPkHex || '00'.repeat(33)),
-    }
+    // Use placeholder signature for WalletConnect (like blockchain.js does)
+    const placeholderSig = new Uint8Array(65) // 65-byte placeholder signature
+    const placeholderPk = hexToBin(ownerPkHex || '00'.repeat(33))
 
     // Build the transaction
     const txBuilder = new TransactionBuilder({ provider })
       .addInput(
         utxo,
         contract.unlock.spend(
-          hexToBin(ownerPkHex || '00'.repeat(33)), // owner public key
-          ownerSigTemplate, // proper signature template
+          placeholderPk, // placeholder public key
+          placeholderSig, // placeholder signature
           oracleMessage,
           oracleSig,
         ),
@@ -75,13 +89,16 @@ export async function simpleWithdrawal(
     const transactionHex =
       typeof wcPayload.transaction === 'string' ? wcPayload.transaction : txBuilder.build()
 
-    // Simple signing request
-    const result = await walletConnectRequest('bch_signTransaction', {
+    // Serialize payload to handle BigInt values
+    const serializedPayload = serializeForWc({
       transaction: transactionHex,
       sourceOutputs: wcPayload.sourceOutputs,
       broadcast: true, // Let wallet broadcast
       userPrompt: 'Withdraw vault funds to your wallet',
     })
+
+    // Simple signing request
+    const result = await walletConnectRequest('bch_signTransaction', serializedPayload)
 
     console.log('Withdrawal result:', result)
     return result

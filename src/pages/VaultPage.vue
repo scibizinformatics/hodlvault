@@ -29,7 +29,7 @@
           <q-icon name="warning" color="orange" size="32px" />
           <span
             >Oracle price unavailable. Check that the backend is running at
-            http://127.0.0.1:8000</span
+            https://oracle1.mainnet.cash</span
           >
           <q-btn flat dense label="Retry" @click="refreshPrice" />
         </div>
@@ -261,6 +261,13 @@
               outlined
               dense
             />
+            <q-input
+              label="Oracle Source"
+              value="Mainnet.cash Production Oracle"
+              readonly
+              outlined
+              dense
+            />
           </div>
         </q-expansion-item>
       </q-card-section>
@@ -285,7 +292,7 @@ import {
   depositToVault,
 } from 'src/services/blockchain'
 import { simpleWithdrawal } from 'src/services/simple-withdrawal'
-import { fetchOraclePrice } from 'src/services/oracle'
+import { fetchOraclePrice, ORACLE_PUBKEY } from 'src/services/oracle'
 import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
 
 export default defineComponent({
@@ -494,7 +501,7 @@ export default defineComponent({
 
         const contractAddress = await calculateContractAddress(
           ownerPkhHex,
-          oraclePkHex,
+          ORACLE_PUBKEY, // Use Oracles.cash public key
           priceTargetCents,
         )
 
@@ -510,7 +517,7 @@ export default defineComponent({
           priceTarget: this.form.priceTarget,
           priceTargetCents,
           ownerPkhHex,
-          oraclePkHex,
+          oraclePkHex: ORACLE_PUBKEY, // Use hardcoded Oracles.cash public key
           contract, // Store contract instance for withdrawal
           originalFundingAddress: this.walletAddress, // Store original funding address
         }
@@ -522,7 +529,7 @@ export default defineComponent({
           priceTarget: this.form.priceTarget,
           priceTargetCents,
           ownerPkhHex,
-          oraclePkHex,
+          oraclePkHex: ORACLE_PUBKEY, // Save Oracles.cash public key
           originalFundingAddress: this.walletAddress, // Save original funding address
           createdAt: Date.now(),
         })
@@ -858,7 +865,7 @@ export default defineComponent({
           priceTarget: persisted.priceTarget ?? null,
           priceTargetCents: persisted.priceTargetCents,
           ownerPkhHex: persisted.ownerPkhHex,
-          oraclePkHex: persisted.oraclePkHex,
+          oraclePkHex: ORACLE_PUBKEY, // Use hardcoded Oracles.cash public key
           contract,
         }
         this.refreshVaultBalance()

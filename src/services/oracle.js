@@ -2,10 +2,11 @@
  * Service to interact with Oracles.cash Production Oracle
  */
 
+export const ORACLE_PUBKEY = '02d09613d20ce44da55956799863c0a5e82c5896a2df33502b4859664650529d2f'
+
 export async function fetchOraclePrice() {
   // Oracles.cash Production API
   const ORACLE_URL = 'https://oracle1.mainnet.cash/api/v1/price/bch-usd'
-  const ORACLE_PUBKEY = '02d09613d20ce44da55956799863c0a5e82c5896a2df33502b4859664650529d2f'
 
   try {
     // Add timeout and better headers

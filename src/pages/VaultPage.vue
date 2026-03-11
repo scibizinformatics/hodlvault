@@ -61,6 +61,35 @@
             :rules="[(val) => val > 0 || 'Price target must be greater than 0']"
             hint="Target BCH/USD price to unlock funds"
           />
+
+          <!-- Auto-Withdrawal Option -->
+          <q-toggle
+            v-model="enableAutoWithdrawal"
+            label="Enable Auto-Withdrawal (Create, Fund, Forget)"
+            color="primary"
+            class="q-mt-md"
+          >
+            <q-tooltip>
+              Automatically withdraw funds when price target is met. Requires pre-signing multiple
+              transactions.
+            </q-tooltip>
+          </q-toggle>
+
+          <div v-if="enableAutoWithdrawal" class="q-mt-sm">
+            <q-banner class="bg-info text-white">
+              <template v-slot:avatar>
+                <q-icon name="auto_awesome" />
+              </template>
+              <div class="text-body2">
+                <strong>Create, Fund, Forget Mode:</strong><br />
+                • Pre-sign withdrawal transactions for multiple price targets<br />
+                • System automatically monitors price and executes withdrawal<br />
+                • No manual action required when target is met<br />
+                • You'll be asked to sign multiple transactions during vault creation
+              </div>
+            </q-banner>
+          </div>
+
           <q-btn
             v-if="hasWallet && hasPublicKey"
             type="submit"
@@ -229,6 +258,21 @@
             Current price (${ currentBchPrice != null ? Number(currentBchPrice).toFixed(2) : '?' }})
             is below target price (${{ vault.priceTarget.toFixed(2) }})
           </div>
+
+          <!-- Auto-Withdrawal Status -->
+          <div v-if="enableAutoWithdrawal" class="q-mt-md">
+            <q-banner class="bg-positive text-white">
+              <template v-slot:avatar>
+                <q-icon name="auto_awesome" />
+              </template>
+              <div class="text-body2">
+                <strong>Auto-Withdrawal Active</strong><br />
+                • System will automatically withdraw when price target is met<br />
+                • No manual action required<br />
+                • Funds will return to: {{ vault.originalFundingAddress }}
+              </div>
+            </q-banner>
+          </div>
         </div>
       </q-card-section>
     </q-card>
@@ -294,6 +338,8 @@ import {
 import { simpleWithdrawal } from 'src/services/simple-withdrawal'
 import { fetchOraclePrice, ORACLE_PUBKEY } from 'src/services/oracle'
 import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
+import { autoWithdrawalService } from 'src/services/auto-withdrawal'
+import { preSigningService } from 'src/services/pre-signing'
 
 export default defineComponent({
   name: 'VaultPage',
@@ -333,6 +379,10 @@ export default defineComponent({
       originalFundingAddress: '',
 
       balanceRefreshing: false,
+
+      // Pre-signing functionality
+      preSigning: false,
+      enableAutoWithdrawal: false,
     }
   },
 
@@ -542,6 +592,11 @@ export default defineComponent({
 
         console.log('Vault created. Contract address:', contractAddress)
         console.log('To lock funds, send', this.form.amount, 'satoshis to:', contractAddress)
+
+        // NEW: Pre-signing for auto-withdrawal
+        if (this.enableAutoWithdrawal) {
+          await this.preSignWithdrawals()
+        }
 
         // Always start watching balance after vault creation (covers both manual and WalletConnect deposits)
         this.startBalancePolling()
@@ -812,6 +867,66 @@ export default defineComponent({
         }
       }, 5000)
     },
+
+    /**
+     * Pre-sign withdrawal transactions for automated withdrawals
+     */
+    async preSignWithdrawals() {
+      if (!this.vault || !this.enableAutoWithdrawal) return
+
+      this.preSigning = true
+      try {
+        const wc = this.$walletConnect
+        if (!wc || !wc.isConnected()) {
+          throw new Error('Wallet not connected for pre-signing')
+        }
+
+        this.$q.notify({
+          type: 'info',
+          message: 'Preparing pre-signed transactions for auto-withdrawal...',
+          icon: 'settings',
+        })
+
+        // Generate pre-signed transactions for various price targets
+        const transactions = await preSigningService.generatePreSignedTransactions(
+          this.vault,
+          (method, params) => wc.request(method, params),
+          this.$store,
+        )
+
+        if (transactions.length > 0) {
+          this.$q.notify({
+            type: 'positive',
+            message: `Successfully pre-signed ${transactions.length} withdrawal transactions!`,
+            icon: 'check_circle',
+          })
+
+          // Add vault to auto-withdrawal monitoring
+          autoWithdrawalService.addVault(this.vault)
+
+          // Start monitoring if not already running
+          autoWithdrawalService.startMonitoring()
+
+          console.log(
+            `Pre-signed ${transactions.length} transactions for vault ${this.vault.contractAddress}`,
+          )
+        } else {
+          throw new Error('No pre-signed transactions were created')
+        }
+      } catch (error) {
+        console.error('Pre-signing failed:', error)
+        this.$q.notify({
+          type: 'negative',
+          message: `Pre-signing failed: ${error.message}`,
+          icon: 'error',
+        })
+
+        // Disable auto-withdrawal if pre-signing failed
+        this.enableAutoWithdrawal = false
+      } finally {
+        this.preSigning = false
+      }
+    },
   },
 
   watch: {
@@ -841,6 +956,10 @@ export default defineComponent({
 
   mounted() {
     this.refreshPrice()
+
+    // Initialize auto-withdrawal service with Vuex store
+    autoWithdrawalService.init(this.$store)
+
     // Restore persisted vault (if it belongs to current wallet)
     const persisted = this.loadPersistedVaultState()
     if (persisted && persisted.walletAddress && persisted.walletAddress === this.walletAddress) {

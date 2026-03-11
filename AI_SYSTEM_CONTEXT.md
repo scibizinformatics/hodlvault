@@ -1,5 +1,5 @@
 # AI Context: hodl-vault-app
-**Generated on:** 2026-03-11 11:04:35
+**Generated on:** 2026-03-11 14:46:15
 **Tech Stack:** Quasar v2 (Vue 3) | State: Vuex/None
 
 ## 1. Project Structure
@@ -8,6 +8,8 @@
 ├── .env
 ├── .gitignore
 ├── .prettierrc.json
+├── AUTO_WITHDRAWAL_IMPLEMENTATION.md
+├── COMPLETE_REDEVELOPMENT_PROMPT.md
 ├── Quasar_AI_Context_Exporter.py
 ├── README.md
 ├── Treeview_folder_info.py
@@ -70,6 +72,7 @@
     │   ├── index.js
     │   └── routes.js
     ├── services
+    │   ├── auto-withdrawal.js
     │   ├── blockchain.js
     │   ├── direct-signing.js
     │   ├── manual-bypass.js
@@ -77,12 +80,14 @@
     │   ├── paytaca-alternatives.js
     │   ├── paytaca-compat.js
     │   ├── paytaca-recovery.js
+    │   ├── pre-signing.js
     │   ├── simple-withdrawal.js
     │   └── ultimate-withdrawal-solutions.js
     └── store
         ├── index.js
         └── modules
             ├── app.js
+            ├── autoWithdrawal.js
             └── wallet.js
 
 ```

@@ -463,7 +463,7 @@ import {
   getAddressBalance,
   depositToVault,
 } from 'src/services/blockchain'
-import { simpleWithdrawal } from 'src/services/simple-withdrawal'
+import { paytacaOptimizedWithdrawal } from 'src/services/paytaca-optimized-withdrawal'
 import { fetchOraclePrice, ORACLE_PUBKEY } from 'src/services/oracle'
 import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
 import { autoWithdrawalService } from 'src/services/auto-withdrawal'
@@ -653,7 +653,9 @@ export default defineComponent({
         console.error('Oracle fetch error:', err)
         this.$q.notify({
           type: 'negative',
-          message: 'Failed to fetch Oracle price. Check backend is running.',
+          message: `RAW ERROR: ${JSON.stringify(err, null, 2)}`,
+          timeout: 15000,
+          html: true,
         })
       } finally {
         this.priceLoading = false
@@ -759,9 +761,9 @@ export default defineComponent({
             console.error('Initial deposit via WalletConnect failed:', depositErr)
             this.$q.notify({
               type: 'negative',
-              message:
-                depositErr?.message ||
-                'Deposit rejected by wallet. Please ensure you have enough funds for the amount + fee.',
+              message: `RAW ERROR: ${JSON.stringify(depositErr, null, 2)}`,
+              timeout: 15000,
+              html: true,
             })
           } finally {
             this.depositing = false
@@ -774,9 +776,12 @@ export default defineComponent({
           })
         }
       } catch (err) {
+        console.error('Vault creation failed:', err)
         this.$q.notify({
           type: 'negative',
-          message: err?.message || 'Failed to create vault',
+          message: `RAW ERROR: ${JSON.stringify(err, null, 2)}`,
+          timeout: 15000,
+          html: true,
         })
       } finally {
         this.locking = false
@@ -800,9 +805,12 @@ export default defineComponent({
           icon: 'check_circle',
         })
       } catch (err) {
+        console.error('Identity verification failed:', err)
         this.$q.notify({
           type: 'negative',
-          message: err?.message || 'Failed to verify identity',
+          message: `RAW ERROR: ${JSON.stringify(err, null, 2)}`,
+          timeout: 15000,
+          html: true,
         })
       } finally {
         this.verifyingIdentity = false
@@ -852,7 +860,7 @@ export default defineComponent({
           oracleSig: this.oracleData.signature_hex ? 'present' : 'missing',
         })
 
-        const result = await simpleWithdrawal(
+        const result = await paytacaOptimizedWithdrawal(
           this.vault.contract,
           ownerAddress,
           this.oracleData.message_hex,
@@ -873,7 +881,9 @@ export default defineComponent({
         console.error('Withdrawal failed:', err)
         this.$q.notify({
           type: 'negative',
-          message: err?.message || 'Failed to withdraw',
+          message: `RAW ERROR: ${JSON.stringify(err, null, 2)}`,
+          timeout: 15000,
+          html: true,
         })
       } finally {
         this.withdrawing = false

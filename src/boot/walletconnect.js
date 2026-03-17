@@ -1,5 +1,5 @@
 /**
-* WalletConnect Boot File (v2.1.1)
+ * WalletConnect Boot File (v2.1.1)
  * Real Paytaca connectivity via WalletConnect v2 Sign Client + Modal.
  * Using Paytaca-compatible chain IDs: bch:bchtest (testnet) and bch:bitcoincash (mainnet).
  * Reference: https://github.com/mainnet-pat/wc2-bch-bcr
@@ -36,20 +36,23 @@ const MODAL_METADATA = {
   icons: ['https://quasar.dev/img/icons/favicon-192x192.png'],
 }
 
-const PROJECT_ID = typeof import.meta !== 'undefined' && import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID
-  ? import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
-  : 'YOUR_REOWN_PROJECT_ID'
+const PROJECT_ID =
+  typeof import.meta !== 'undefined' && import.meta.env?.VITE_WALLETCONNECT_PROJECT_ID
+    ? import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
+    : 'YOUR_REOWN_PROJECT_ID'
 
 // Validate PROJECT_ID on init
 if (PROJECT_ID === 'YOUR_REOWN_PROJECT_ID') {
   console.warn(
-    '⚠️ WalletConnect PROJECT_ID not set! Set VITE_WALLETCONNECT_PROJECT_ID in .env or get one from https://cloud.reown.com'
+    '⚠️ WalletConnect PROJECT_ID not set! Set VITE_WALLETCONNECT_PROJECT_ID in .env or get one from https://cloud.reown.com',
   )
 }
 
 let signClient = null
 let modal = null
 let currentSession = null
+let isConnecting = false // Prevent multiple simultaneous connections
+let connectionPromise = null // Track ongoing connection attempts
 
 const BITCOIN_SIGNED_MESSAGE_PREFIX = (() => {
   const encoder = new TextEncoder()
@@ -64,13 +67,7 @@ function encodeBitcoinVarInt(n) {
   if (n < 0xfd) return Uint8Array.from([n])
   if (n <= 0xffff) return Uint8Array.from([0xfd, n & 0xff, (n >>> 8) & 0xff])
   if (n <= 0xffffffff) {
-    return Uint8Array.from([
-      0xfe,
-      n & 0xff,
-      (n >>> 8) & 0xff,
-      (n >>> 16) & 0xff,
-      (n >>> 24) & 0xff,
-    ])
+    return Uint8Array.from([0xfe, n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff])
   }
   throw new Error('Message too long')
 }
@@ -93,11 +90,7 @@ function hash256(payload) {
 function hashBitcoinSignedMessage(message) {
   const encoder = new TextEncoder()
   const msg = encoder.encode(message)
-  const preimage = concatBytes(
-    BITCOIN_SIGNED_MESSAGE_PREFIX,
-    encodeBitcoinVarInt(msg.length),
-    msg
-  )
+  const preimage = concatBytes(BITCOIN_SIGNED_MESSAGE_PREFIX, encodeBitcoinVarInt(msg.length), msg)
   return hash256(preimage)
 }
 
@@ -141,9 +134,10 @@ export async function recoverPublicKey(store) {
     throw new Error('Wallet did not return a message signature')
   }
 
-  const rawString = typeof signatureResponse === 'string'
-    ? signatureResponse.trim()
-    : JSON.stringify(signatureResponse)
+  const rawString =
+    typeof signatureResponse === 'string'
+      ? signatureResponse.trim()
+      : JSON.stringify(signatureResponse)
 
   let decoded = base64ToBin(rawString)
   let sigWithHeader = tryExtractCompactSignature(decoded)
@@ -154,7 +148,9 @@ export async function recoverPublicKey(store) {
   }
 
   if (!sigWithHeader) {
-    throw new Error(`Unable to locate compact signature in payload (decoded length: ${decoded.length})`)
+    throw new Error(
+      `Unable to locate compact signature in payload (decoded length: ${decoded.length})`,
+    )
   }
 
   const header = sigWithHeader[0]
@@ -196,113 +192,216 @@ async function getSignClient() {
     projectId: PROJECT_ID,
     metadata: MODAL_METADATA,
   })
+
+  // Add session event listeners for better state management
+  signClient.on('session_event', ({ event, chainId }) => {
+    console.log('WalletConnect session event:', { event, chainId })
+    // Handle session events like addressesChanged
+    if (event.name === 'addressesChanged' && currentSession) {
+      // Refresh wallet state when addresses change
+      syncSessionToStore(signClient, currentSession)
+    }
+  })
+
+  signClient.on('session_delete', () => {
+    console.log('WalletConnect session deleted')
+    currentSession = null
+    // Note: store clearing will be handled by the boot function
+  })
+
   return signClient
 }
 
 function getModal() {
   if (modal) return modal
-  // Modal chains must match namespace chains for Paytaca compatibility
+  // Enhanced modal configuration for better QR code display
   modal = new WalletConnectModal({
     projectId: PROJECT_ID,
     chains: [BCH_TESTNET_CHAIN, BCH_CHIPNET_CHAIN, BCH_MAINNET_CHAIN],
     themeMode: 'light',
-    themeVariables: { '--wcm-z-index': '9999' },
+    themeVariables: {
+      '--wcm-z-index': '9999',
+      '--wcm-background-color': '#ffffff',
+      '--wcm-fallback-color': '#ffffff',
+      '--wcm-accent-color': '#00d588',
+      '--wcm-accent-fill-color': '#ffffff',
+    },
+    standaloneChains: [BCH_CHIPNET_CHAIN], // Default to chipnet
+    qrModalSize: 'lg', // Larger QR code
+    enableMobileWalletFocus: true, // Better mobile experience
   })
   return modal
+}
+
+// Enhanced session cleanup function
+async function cleanupStaleSessions(client) {
+  try {
+    const sessions = client.session.getAll()
+    const bchSessions = sessions.filter((s) => s.namespaces?.bch?.accounts?.length)
+
+    for (const session of bchSessions) {
+      try {
+        // Check if session is still valid
+        const methods = session.namespaces?.bch?.methods ?? []
+        const hasRequiredMethods = REQUIRED_METHODS.every((m) => methods.includes(m))
+
+        if (!hasRequiredMethods || session.expiry * 1000 < Date.now()) {
+          console.log('Cleaning up stale session:', session.topic)
+          await client.disconnect({ topic: session.topic })
+        }
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup session:', cleanupError)
+      }
+    }
+  } catch (error) {
+    console.warn('Session cleanup failed:', error)
+  }
 }
 
 export function initializeWalletConnect(store) {
   return {
     async connect() {
+      // Prevent multiple simultaneous connections
+      if (isConnecting) {
+        console.log('Connection already in progress, returning existing promise')
+        return connectionPromise
+      }
+
+      isConnecting = true
+      connectionPromise = this._performConnection(store)
+
+      try {
+        const result = await connectionPromise
+        return result
+      } finally {
+        isConnecting = false
+        connectionPromise = null
+      }
+    },
+
+    async _performConnection(store) {
       if (!store) return null
-      const timeoutMs = 60000
-      const connectFlow = async () => {
+
+      try {
         const client = await getSignClient()
 
+        // Clean up stale sessions first
+        await cleanupStaleSessions(client)
+
         const existingSessions = client.session.getAll()
-        const bchSession = existingSessions.find(
-          (s) => s.namespaces?.bch?.accounts?.length
-        )
+        const bchSession = existingSessions.find((s) => s.namespaces?.bch?.accounts?.length)
         if (bchSession) {
           const methods = bchSession.namespaces?.bch?.methods ?? []
           const hasRequiredMethods = REQUIRED_METHODS.every((m) => methods.includes(m))
-          if (!hasRequiredMethods) {
+
+          if (hasRequiredMethods && bchSession.expiry * 1000 > Date.now()) {
+            currentSession = bchSession
+            await syncSessionToStore(store, client, bchSession)
+            return store.state.wallet?.address ?? null
+          } else {
+            // Disconnect invalid session
             try {
               await client.disconnect({ topic: bchSession.topic })
             } catch {
               // ignore disconnect errors for stale sessions
             }
-          } else {
-            currentSession = bchSession
-            await syncSessionToStore(store, client, bchSession)
-            return store.state.wallet?.address ?? null
           }
         }
 
-        // Use requiredNamespaces as per wc2-bch-bcr spec (Paytaca expects this format)
+        // Create new connection
         const { uri, approval } = await client.connect({
           requiredNamespaces: REQUIRED_NAMESPACES,
           optionalNamespaces: OPTIONAL_NAMESPACES,
         })
 
         const wcModal = getModal()
+
+        // Enhanced QR code display with error handling
         if (uri) {
-          await wcModal.openModal({ uri })
+          try {
+            // Add small delay to ensure modal is ready
+            await new Promise((resolve) => setTimeout(resolve, 100))
+            await wcModal.openModal({ uri })
+
+            // Add timeout for QR code display
+            const qrTimeout = setTimeout(() => {
+              console.warn('QR code display timeout, attempting to reopen modal')
+              wcModal.closeModal()
+              setTimeout(() => wcModal.openModal({ uri }), 500)
+            }, 5000)
+
+            // Clear timeout when modal is closed
+            const originalCloseModal = wcModal.closeModal
+            wcModal.closeModal = function (...args) {
+              clearTimeout(qrTimeout)
+              return originalCloseModal.apply(this, args)
+            }
+          } catch (modalError) {
+            console.error('Failed to open WalletConnect modal:', modalError)
+            throw new Error('Failed to display QR code. Please try again.')
+          }
         }
 
         const session = await approval()
-        if (wcModal && typeof wcModal.closeModal === 'function') wcModal.closeModal()
-        currentSession = session
 
+        // Ensure modal is properly closed
+        if (wcModal && typeof wcModal.closeModal === 'function') {
+          wcModal.closeModal()
+        }
+
+        currentSession = session
         await syncSessionToStore(store, client, session)
         return store.state.wallet?.address ?? null
-      }
-
-      try {
-        const result = await Promise.race([
-          connectFlow(),
-          new Promise((_, reject) =>
-            setTimeout(
-              () => reject(new Error('WalletConnect connection timed out. Please try again.')),
-              timeoutMs
-            )
-          ),
-        ])
-        return result
       } catch (err) {
+        // Enhanced error handling and cleanup
         const m = getModal()
-        if (m && typeof m.closeModal === 'function') m.closeModal()
+        if (m && typeof m.closeModal === 'function') {
+          try {
+            m.closeModal()
+          } catch (closeError) {
+            console.warn('Failed to close modal:', closeError)
+          }
+        }
+
         try {
           await this.disconnect()
         } catch {
           // ignore disconnect errors during recovery
         }
-        // Enhanced error logging for debugging
+
+        // Enhanced error logging
         console.error('WalletConnect connection error:', {
           message: err?.message,
           code: err?.code,
           data: err?.data,
           stack: err?.stack,
         })
+
         throw err
       }
     },
 
     async disconnect() {
-      if (signClient && currentSession?.topic) {
-        try {
+      try {
+        if (signClient && currentSession?.topic) {
           await signClient.disconnect({ topic: currentSession.topic })
-        } catch (e) {
-          // ignore disconnection errors
-          console.debug('WalletConnect disconnect ignored:', e)
         }
+      } catch (e) {
+        console.debug('WalletConnect disconnect ignored:', e)
       }
-      if (store) store.commit('wallet/CLEAR_WALLET')
+
+      // Clear ALL state
       currentSession = null
+      isConnecting = false
+      connectionPromise = null
+
+      if (store) {
+        store.commit('wallet/CLEAR_WALLET')
+      }
     },
 
     isConnected() {
-      return !!store?.state?.wallet?.address
+      return !!store?.state?.wallet?.address && !!currentSession?.topic
     },
 
     getAddress() {
@@ -346,36 +445,38 @@ export function initializeWalletConnect(store) {
 
 async function syncSessionToStore(store, client, session) {
   const chainId = session.namespaces?.bch?.chains?.[0] ?? BCH_CHIPNET_CHAIN
-  
+
   // Validate chain ID matches expected network
   console.log('DEBUG: WalletConnect session chain ID:', chainId)
-  console.log('DEBUG: Expected chain IDs:', [BCH_CHIPNET_CHAIN, BCH_TESTNET_CHAIN, BCH_MAINNET_CHAIN])
-  
+  console.log('DEBUG: Expected chain IDs:', [
+    BCH_CHIPNET_CHAIN,
+    BCH_TESTNET_CHAIN,
+    BCH_MAINNET_CHAIN,
+  ])
+
   try {
     const addresses = await client.request({
       chainId,
       topic: session.topic,
       request: { method: 'bch_getAddresses', params: {} },
     })
-    const address = Array.isArray(addresses) && addresses.length
-      ? addresses[0]
-      : null
-    
+    const address = Array.isArray(addresses) && addresses.length ? addresses[0] : null
+
     console.log('DEBUG: Retrieved wallet address:', address)
-    
+
     // Try to extract public key from session accounts or request it
     let publicKey = null
     try {
       // Check if public key is in session accounts (format: "bch:chainId:address" or similar)
       const accounts = session.namespaces?.bch?.accounts ?? []
       console.log('DEBUG: Session accounts:', accounts)
-      
+
       // Some wallets provide public key in account metadata
       if (accounts.length > 0 && accounts[0].includes(':')) {
         // Account format might contain public key info, but typically we need to request it
         // Paytaca may provide it via a separate method or in session metadata
       }
-      
+
       // Try requesting public key if Paytaca supports it (some wallets do)
       // Note: This is optional - if not supported, we'll proceed with address only
       try {
@@ -396,30 +497,30 @@ async function syncSessionToStore(store, client, session) {
       console.warn('DEBUG: Public key extraction failed:', error.message)
       // Public key extraction failed - continue with address only
     }
-    
+
     if (address) {
       // Validate address format matches chain ID
       const addressNetwork = inferNetworkFromAddress(address)
       const expectedNetwork = getNetworkFromChainId(chainId)
-      
+
       console.log('DEBUG: Address network inference:', addressNetwork)
       console.log('DEBUG: Expected network from chain ID:', expectedNetwork)
-      
+
       if (addressNetwork !== expectedNetwork) {
         console.warn('DEBUG: Network mismatch detected', {
           address,
           addressNetwork,
           expectedNetwork,
-          chainId
+          chainId,
         })
       }
-      
+
       store.commit('wallet/SET_WALLET', {
         address,
         publicKey,
         privateKey: null,
       })
-      
+
       console.log('DEBUG: Wallet state updated successfully')
     } else {
       console.warn('DEBUG: No address retrieved from wallet')
@@ -451,12 +552,24 @@ async function restoreSessionIfAny(store) {
     const client = await getSignClient()
     const sessions = client.session.getAll()
     const bchSession = sessions.find((s) => s.namespaces?.bch?.accounts?.length)
-    if (bchSession) {
-      currentSession = bchSession
-      await syncSessionToStore(store, client, bchSession)
+
+    if (bchSession && bchSession.expiry * 1000 > Date.now()) {
+      // Check if session has required methods
+      const methods = bchSession.namespaces?.bch?.methods ?? []
+      const hasRequiredMethods = REQUIRED_METHODS.every((m) => methods.includes(m))
+
+      if (hasRequiredMethods) {
+        currentSession = bchSession
+        await syncSessionToStore(client, bchSession)
+      } else {
+        // Clean up invalid session
+        await client.disconnect({ topic: bchSession.topic })
+      }
+    } else if (bchSession) {
+      // Clean up expired session
+      await client.disconnect({ topic: bchSession.topic })
     }
   } catch (e) {
-    // ignore session restore errors
     console.debug('WalletConnect session restore failed:', e)
   }
 }

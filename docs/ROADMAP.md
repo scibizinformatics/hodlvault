@@ -1,48 +1,133 @@
 # HodlVault Development Roadmap
 
-This roadmap outlines the path from a Chipnet prototype to a feature-complete, real-time HODL application.
+This roadmap outlines the development path from the current MVP to a production-ready HodlVault system with enhanced features and mainnet deployment.
 
-## Phase 1: Foundation & Wallet Integration (Week 1)
+## Current Status: MVP Complete ✅
 
-_Goal: Establish the UI skeleton and connect to the BCH network._
+### Completed Features
 
-- [ ] **Project Scaffolding:** Set up Vue.js project using **Options API** and ESLint.
-- [ ] **Responsive Layout:** Build the mobile-first CSS shell (Header, Vault Card, Footer).
-- [ ] **Paytaca Connection:** Implement Paytaca SDK to allow users to connect their Chipnet wallets.
-- [ ] **Network Check:** Add logic to ensure the user is on **Chipnet** (preventing Mainnet errors).
+- ✅ **Core Vault System:** CashScript smart contracts with price locking
+- ✅ **Oracles.cash Integration:** Live price oracle with signature verification
+- ✅ **Auto-Withdrawal:** Automated withdrawal system with pre-signing
+- ✅ **Paytaca Wallet:** WalletConnect v2 integration with fallback strategies
+- ✅ **Modern UI:** Renao design with dark theme and responsive layout
+- ✅ **Chipnet Testing:** Full testnet functionality with explorer integration
 
-## Phase 2: The Vault & Oracle Logic (Week 2)
+## Phase 1: Production Hardening (Next 2 Weeks)
 
-_Goal: Implement the core "Lock" functionality._
+### Security & Reliability
 
-- [ ] **Vault Creation UI:** Forms to set "Target Price" and "Vault Name."
-- [ ] **Price Oracle Integration:** Connect to a price feed API to fetch live BCH/USD rates.
-- [ ] **Locking Mechanism:**
-  - Create a computed property to compare `Target Price` vs. `Current Price`.
-  - Disable "Withdraw" buttons if the condition is not met.
-- [ ] **QR Deposit System:** Integrate a QR code generator library to display the vault's BCH address.
+- [ ] **Enhanced Error Handling:** Comprehensive error recovery for all transaction types
+- [ ] **Transaction Monitoring:** Real-time transaction status tracking
+- [ ] **Backup & Recovery:** Vault state backup and restoration mechanisms
+- [ ] **Security Audit:** Smart contract and application security review
 
-## Phase 3: Real-Time Engine (Week 3)
+### Performance Optimizations
 
-_Goal: Eliminate page refreshes and provide live feedback._
+- [ ] **Oracle Caching:** Intelligent price data caching to reduce API calls
+- [ ] **Balance Polling:** Optimized blockchain polling intervals
+- [ ] **UI Performance:** Lazy loading and component optimization
+- [ ] **Memory Management:** Cleanup of unused services and listeners
 
-- [ ] **WebSocket Integration:** Replace standard API polling with WebSockets for live price updates.
-- [ ] **Transaction Listeners:** Implement a listener that detects incoming BCH deposits on Chipnet and updates the balance instantly.
-- [ ] **Live Status UI:**
-  - Add a "Sending..." and "Confirmed" status indicator for withdrawals.
-  - Animate price changes (green/red flashes) to show live data flow.
+## Phase 2: Feature Enhancement (Weeks 3-4)
 
-## Phase 4: Hardening & Linting (Week 4)
+### Advanced Vault Features
 
-_Goal: Code quality and final polish._
+- [ ] **Multi-Vault Support:** Users can create and manage multiple vaults
+- [ ] **Partial Withdrawals:** Withdraw specific amounts instead of all funds
+- [ ] **Time-Lock Options:** Combine price locks with time-based locks
+- [ ] **Vault Templates:** Pre-configured vault strategies for different goals
 
-- [ ] **Linting Sweep:** Run `eslint --fix` and resolve all remaining architectural warnings.
-- [ ] **Error Handling:** Add "Toast" notifications for failed transactions or Oracle timeouts.
-- [ ] **Cross-Device Testing:** Ensure the responsive design works on iOS, Android, and Desktop browsers.
-- [ ] **Final MVP Review:** Verify the system logic: _Can funds be withdrawn if the price is below target?_ (Should be: NO).
+### Enhanced Auto-Withdrawal
 
-## Future Ideas (Post-MVP)
+- [ ] **Conditional Strategies:** Complex withdrawal conditions (trailing stops, etc.)
+- [ ] **Withdrawal Scheduling:** Time-based withdrawal execution
+- [ ] **Notification System:** Email/Push notifications for withdrawals
+- [ ] **Withdrawal History:** Detailed transaction history and reporting
 
-- **Multi-Vaults:** Allow users to have multiple HODL goals at once.
-- **Time-Lock + Price-Lock:** Add an option to lock until a date OR a price.
-- **Mainnet Migration:** Prepare the system for real BCH value once Chipnet testing is 100% stable.
+## Phase 3: Mainnet Preparation (Weeks 5-6)
+
+### Mainnet Configuration
+
+- [ ] **Network Switching:** Seamless chipnet to mainnet transition
+- [ ] **Mainnet Oracle:** Production oracle service integration
+- [ ] **Fee Optimization:** Dynamic fee calculation for mainnet transactions
+- [ ] **Gas Estimation:** Accurate transaction cost predictions
+
+### Compliance & Safety
+
+- [ ] **Risk Warnings:** Clear user warnings about mainnet risks
+- [ ] **Transaction Limits:** Maximum transaction amounts for safety
+- [ ] **Emergency Controls:** Manual override mechanisms for critical situations
+- [ ] **Legal Compliance:** Terms of service and privacy policy updates
+
+## Phase 4: Advanced Features (Weeks 7-8)
+
+### Analytics & Insights
+
+- [ ] **Portfolio Dashboard:** Total portfolio value and performance metrics
+- [ ] **Price Analytics:** Historical price data and trend analysis
+- [ ] **Vault Performance:** Individual vault success rates and statistics
+- [ ] **Market Integration:** Additional price sources and market data
+
+### User Experience Enhancements
+
+- [ ] **Mobile App:** Native mobile application (React Native)
+- [ ] **Browser Extension:** Chrome/Firefox extension for quick access
+- [ ] **Advanced Settings:** Granular control over vault parameters
+- [ ] **Import/Export:** Vault configuration import/export functionality
+
+## Phase 5: Ecosystem Integration (Weeks 9-10)
+
+### DeFi Integration
+
+- [ ] **DEX Integration:** Connect to decentralized exchanges
+- [ ] **Liquidity Pools:** Provide liquidity while maintaining price locks
+- [ ] **Yield Strategies:** Generate yield on locked funds where possible
+- [ ] **Cross-Chain:** Multi-chain support for other Bitcoin forks
+
+### API & Developer Tools
+
+- [ ] **Public API:** RESTful API for third-party integrations
+- [ ] **SDK Development:** JavaScript/Python SDK for developers
+- [ ] **Documentation:** Comprehensive API and integration documentation
+- [ ] **Developer Portal:** Resources and tools for ecosystem developers
+
+## Future Vision (Post-MVP)
+
+### Enterprise Features
+
+- **Institutional Vaults:** High-value vault solutions for institutions
+- **White-Label Solutions:** Custom vault solutions for partners
+- **Custodial Integration:** Integration with custodial services
+- **Compliance Tools:** KYC/AML integration for regulated entities
+
+### Advanced Technology
+
+- **Layer 2 Support:** Integration with Bitcoin Cash L2 solutions
+- **Privacy Features:** Enhanced privacy options for sensitive transactions
+- **AI Integration:** Machine learning for optimal withdrawal timing
+- **Quantum Resistance:** Future-proofing against quantum computing threats
+
+## Success Metrics
+
+### Technical Metrics
+
+- 99.9% uptime for oracle services
+- <5 second average transaction confirmation time
+- <1% failed transaction rate
+- 100% smart contract audit coverage
+
+### Business Metrics
+
+- 1000+ active vaults within 3 months of mainnet launch
+- $1M+ total value locked (TVL) within 6 months
+- 4.8+ user satisfaction rating
+- 50+ third-party integrations
+
+### Security Metrics
+
+- Zero security incidents
+- Regular security audits passed
+- 100% fund recovery capability
+- Comprehensive insurance coverage options

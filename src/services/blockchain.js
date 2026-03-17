@@ -9,13 +9,6 @@ import HodlVaultArtifact from 'src/contract/HodlVault.json'
 import { hexToBin, binToHex } from '@bitauth/libauth'
 import { createPaytacaPayload } from './paytaca-compat'
 import { paytacaRequestWithRecovery } from './paytaca-recovery'
-import {
-  tryAlternativeSendTransaction,
-  trySimplifiedTransaction,
-  tryManualSignAndBroadcast,
-  tryUltimateFallback,
-} from './paytaca-alternatives'
-import { tryDirectPaytacaSigning } from './direct-signing'
 
 // Placeholders for WalletConnect: wallet replaces these when signing (wc2-bch-bcr)
 const placeholderPublicKey = () => new Uint8Array(33)
@@ -105,8 +98,7 @@ export async function getAddressBalance(address) {
     }
   }
 
-  const message = lastError && lastError.message ? lastError.message : String(lastError)
-  throw new Error(`Failed to fetch balance from network provider: ${message}`)
+  throw new Error(`RAW ADDRESS BALANCE ERROR: ${JSON.stringify(lastError, null, 2)}`)
 }
 
 /**
@@ -149,7 +141,7 @@ export async function calculateContractAddress(ownerPkhHex, oraclePkHex, priceTa
     const contract = initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTarget)
     return contract.address
   } catch (error) {
-    throw new Error(`Failed to calculate contract address: ${error.message}`)
+    throw new Error(`RAW CONTRACT ADDRESS ERROR: ${JSON.stringify(error, null, 2)}`)
   }
 }
 
@@ -162,7 +154,7 @@ export async function getContractBalance(contract) {
   try {
     return await getAddressBalance(contract.address)
   } catch (error) {
-    throw new Error(`Failed to get contract balance: ${error.message}`)
+    throw new Error(`RAW CONTRACT BALANCE ERROR: ${JSON.stringify(error, null, 2)}`)
   }
 }
 
@@ -280,130 +272,28 @@ export async function spendVault(
             )
           },
 
-          // ATTEMPT 2: BREAKTHROUGH - CashScript Contract Approach
+          // ATTEMPT 2: Alternative bch_sendTransaction with broadcast=true
           async () => {
-            console.log('DEBUG: ATTEMPT 2 - BREAKTHROUGH: CashScript Contract Approach...')
-            const { tryCashScriptContractApproach } =
-              await import('./ultimate-withdrawal-solutions.js')
-            return await tryCashScriptContractApproach(
-              contract,
-              ownerAddress,
-              ownerPkHex,
-              oracleMessageHex,
-              oracleSigHex,
-            )
+            console.log('DEBUG: ATTEMPT 2 - Alternative bch_sendTransaction...')
+            const payload = {
+              transaction: transactionHex,
+              sourceOutputs: wcPayload.sourceOutputs,
+              broadcast: true,
+              userPrompt: 'Sign vault withdrawal',
+            }
+            return await walletConnectRequest('bch_sendTransaction', payload)
           },
 
-          // ATTEMPT 3: BREAKTHROUGH - Alternative WalletConnect methods
+          // ATTEMPT 3: Direct transaction signing (fallback)
           async () => {
-            console.log('DEBUG: ATTEMPT 3 - BREAKTHROUGH: Alternative WalletConnect methods...')
-            const { tryAlternativeWalletConnectMethods } =
-              await import('./ultimate-withdrawal-solutions.js')
-            return await tryAlternativeWalletConnectMethods(walletConnectRequest, transactionHex)
-          },
-
-          // ATTEMPT 4: BREAKTHROUGH - Direct transaction construction
-          async () => {
-            console.log('DEBUG: ATTEMPT 4 - BREAKTHROUGH: Direct transaction construction...')
-            const { tryDirectTransactionConstruction } =
-              await import('./ultimate-withdrawal-solutions.js')
-            return await tryDirectTransactionConstruction(contract, ownerAddress)
-          },
-
-          // ATTEMPT 5: BREAKTHROUGH - Manual raw transaction
-          async () => {
-            console.log('DEBUG: ATTEMPT 5 - BREAKTHROUGH: Manual raw transaction...')
-            const { tryManualRawTransaction } = await import('./ultimate-withdrawal-solutions.js')
-            return await tryManualRawTransaction()
-          },
-
-          // ATTEMPT 5: BREAKTHROUGH - QR code transaction
-          async () => {
-            console.log('DEBUG: ATTEMPT 5 - BREAKTHROUGH: QR code transaction...')
-            const { tryQRCodeTransaction } = await import('./ultimate-withdrawal-solutions.js')
-            return await tryQRCodeTransaction(contract, ownerAddress, amount)
-          },
-
-          // ATTEMPT 6: BREAKTHROUGH - Step-by-step builder
-          async () => {
-            console.log('DEBUG: ATTEMPT 6 - BREAKTHROUGH: Step-by-step builder...')
-            const { tryStepByStepBuilder } = await import('./ultimate-withdrawal-solutions.js')
-            return await tryStepByStepBuilder(contract, ownerAddress, amount)
-          },
-
-          // ATTEMPT 7: Alternative bch_sendTransaction with broadcast=true
-          async () => {
-            console.log('DEBUG: ATTEMPT 7 - Alternative bch_sendTransaction...')
-            return await tryAlternativeSendTransaction(
-              walletConnectRequest,
-              transactionHex,
-              wcPayload.sourceOutputs,
-              'Sign vault withdrawal',
-            )
-          },
-
-          // ATTEMPT 8: BREAKTHROUGH - Manual hex generation
-          async () => {
-            console.log('DEBUG: ATTEMPT 8 - BREAKTHROUGH: Manual hex generation...')
-            const { tryManualHexGeneration } = await import('./ultimate-withdrawal-solutions.js')
-            return await tryManualHexGeneration()
-          },
-
-          // ATTEMPT 9: BREAKTHROUGH - Contract simulation
-          async () => {
-            console.log('DEBUG: ATTEMPT 9 - BREAKTHROUGH: Contract simulation...')
-            const { tryContractSimulation } = await import('./ultimate-withdrawal-solutions.js')
-            const ownerPkHexSimulation = ownerPkHex || ''
-            return await tryContractSimulation(
-              contract,
-              ownerPkHexSimulation,
-              oracleMessageHex,
-              oracleSigHex,
-            )
-          },
-
-          // ATTEMPT 10: BREAKTHROUGH - Manual instructions
-          async () => {
-            console.log('DEBUG: ATTEMPT 10 - BREAKTHROUGH: Manual instructions...')
-            const { tryManualInstructions } = await import('./ultimate-withdrawal-solutions.js')
-            return await tryManualInstructions(contract, ownerAddress, amount)
-          },
-
-          // ATTEMPT 11: Simplified transaction payload
-          async () => {
-            console.log('DEBUG: ATTEMPT 11 - Simplified transaction payload...')
-            return await trySimplifiedTransaction(
-              walletConnectRequest,
-              transactionHex,
-              'Sign vault withdrawal',
-            )
-          },
-
-          // ATTEMPT 12: Manual sign and broadcast
-          async () => {
-            console.log('DEBUG: ATTEMPT 12 - Manual sign and broadcast...')
-            return await tryManualSignAndBroadcast(
-              walletConnectRequest,
-              transactionHex,
-              provider,
-              'Sign vault withdrawal',
-            )
-          },
-
-          // ATTEMPT 13: Ultimate fallback - check history
-          async () => {
-            console.log('DEBUG: ATTEMPT 13 - Ultimate fallback - check history...')
-            return await tryUltimateFallback(walletConnectRequest, contract.address, amount)
-          },
-
-          // ATTEMPT 14: Direct Paytaca signing - bypass WalletConnect complexity
-          async () => {
-            console.log('DEBUG: ATTEMPT 14 - Direct Paytaca signing...')
-            return await tryDirectPaytacaSigning(
-              walletConnectRequest,
-              transactionHex,
-              'Sign vault withdrawal',
-            )
+            console.log('DEBUG: ATTEMPT 3 - Direct transaction signing...')
+            const payload = {
+              transaction: transactionHex,
+              sourceOutputs: wcPayload.sourceOutputs,
+              broadcast: true,
+              userPrompt: 'Sign vault withdrawal',
+            }
+            return await walletConnectRequest('bch_signTransaction', payload)
           },
         ]
 
@@ -461,9 +351,7 @@ export async function spendVault(
         // If all attempts failed
         if (!result) {
           console.error('DEBUG: All signing attempts failed, last error:', lastError)
-          throw new Error(
-            `Paytaca signing failed. Tried ${signingAttempts.length} different approaches. Last error: ${lastError?.message || 'Unknown error'}`,
-          )
+          throw new Error(`RAW PAYTACA SIGNING ERROR: ${JSON.stringify(lastError, null, 2)}`)
         }
 
         console.log('DEBUG: Enhanced wallet response:', {

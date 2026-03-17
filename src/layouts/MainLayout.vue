@@ -1,49 +1,56 @@
 <template>
   <q-layout view="lHh Lpr lFf">
-    <q-header elevated>
+    <q-header elevated class="bg-dark text-white">
       <q-toolbar>
-        <q-toolbar-title>BCH HodlVault v2.1.1</q-toolbar-title>
+        <q-toolbar-title class="text-weight-bold"> HodlVault </q-toolbar-title>
 
-        <div class="row items-center q-gutter-sm">
-          <div class="text-caption q-mr-md">Quasar v{{ $q.version }}</div>
+        <q-space />
 
-          <template v-if="connectedAddress">
-            <q-chip color="positive" text-color="white" icon="check_circle">
-              Connected
-            </q-chip>
-            <q-input
-              :model-value="connectedAddress"
-              readonly
-              outlined
-              dense
-              class="monospace"
-              input-class="text-select"
-              style="max-width: 320px"
-            />
-            <q-btn
-              flat
-              dense
-              color="negative"
-              label="Disconnect"
-              @click="onDisconnectWallet"
-            />
-          </template>
-          <template v-else>
-            <q-btn
-              color="primary"
-              label="Connect Wallet"
-              :loading="connecting"
-              @click="onConnectWallet"
-              icon="account_balance_wallet"
-            />
-          </template>
-        </div>
+        <!-- Debug Mock Connect Button - Corner -->
+        <q-btn
+          v-if="!connectedAddress"
+          color="warning"
+          label="Mock"
+          icon="bug_report"
+          unelevated
+          size="xs"
+          class="q-mr-sm"
+          @click="onMockConnect"
+        />
+
+        <q-btn
+          v-if="!connectedAddress"
+          color="primary"
+          label="Connect Wallet"
+          icon="account_balance_wallet"
+          unelevated
+          class="text-weight-medium"
+          :loading="connecting"
+          @click="onConnectWallet"
+        />
+        <q-btn
+          v-else
+          color="positive"
+          :label="shortAddress"
+          icon="check_circle"
+          unelevated
+          class="text-weight-medium"
+          @click="onDisconnectWallet"
+        />
       </q-toolbar>
     </q-header>
 
     <q-page-container>
       <router-view />
     </q-page-container>
+
+    <q-footer class="bg-transparent text-grey-8">
+      <div class="row justify-center q-pa-sm">
+        <div class="text-caption" style="opacity: 0.4; font-size: 10px; line-height: 1.2">
+          System Version: v2.1.1 | Network: CHIPNET
+        </div>
+      </div>
+    </q-footer>
   </q-layout>
 </template>
 
@@ -62,6 +69,12 @@ export default defineComponent({
   computed: {
     connectedAddress() {
       return this.$store.state.wallet?.address ?? null
+    },
+
+    shortAddress() {
+      if (!this.connectedAddress) return ''
+      const addr = this.connectedAddress
+      return `${addr.slice(0, 8)}...${addr.slice(-8)}`
     },
   },
 
@@ -96,6 +109,19 @@ export default defineComponent({
       this.$q.notify({
         type: 'info',
         message: 'Wallet disconnected',
+      })
+    },
+
+    onMockConnect() {
+      // Mock connection for testing
+      this.$store.dispatch('wallet/setWallet', {
+        address: 'chipnet:qz4wqx8kjzlk7yalev0x8c8nppd6vqszxg5xqf8jrp',
+        publicKey: '02d09613d20ce44da55956799863c0a5e82c5896a2df33502b4859664650529d2f',
+      })
+      this.$q.notify({
+        type: 'positive',
+        message: 'Mock connection established',
+        icon: 'check_circle',
       })
     },
   },

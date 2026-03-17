@@ -45,7 +45,7 @@ export async function simpleWithdrawal(
       current.satoshis > best.satoshis ? current : best,
     )
 
-    const minerFee = 400n
+    const minerFee = 1000n
     const amount = utxo.satoshis - minerFee
 
     if (amount <= 0n) {
@@ -63,7 +63,11 @@ export async function simpleWithdrawal(
     const oracleSig = hexToBin(oracleSigHex)
 
     // Use placeholder signature for WalletConnect (like blockchain.js does)
-    const placeholderSig = new Uint8Array(65) // 65-byte placeholder signature
+    // IMPORTANT: Paytaca needs SIGHASH_ALL | SIGHASH_UTXOS (0x41) for covenant contracts
+    const placeholderSig = {
+      signature: new Uint8Array(65), // 65-byte placeholder signature
+      sighashType: 0x41, // SIGHASH_ALL | SIGHASH_UTXOS for covenant compatibility
+    }
     const placeholderPk = hexToBin(ownerPkHex || '00'.repeat(33))
 
     // Build the transaction

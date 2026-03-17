@@ -55,10 +55,16 @@ export async function fetchOraclePrice() {
     const priceInCents = Math.round(data['bitcoin-cash'].usd * 100)
     const currentHeight = Date.now() // Use timestamp as mock block height
 
-    // Create oracle-like message (4 bytes height + 4 bytes price in cents)
+    // Create oracle-like message with proper Little-Endian encoding for Bitcoin Script
+    // Bitcoin Script expects Little-Endian integers for int() operations
     const heightHex = currentHeight.toString(16).padStart(8, '0').slice(-8)
     const priceHex = priceInCents.toString(16).padStart(8, '0')
-    const messageHex = heightHex + priceHex
+
+    // Convert to Little-Endian format (reverse hex string)
+    const heightHexLE = heightHex.match(/.{2}/g).reverse().join('')
+    const priceHexLE = priceHex.match(/.{2}/g).reverse().join('')
+
+    const messageHex = heightHexLE + priceHexLE
 
     // Map to the format the UI expects
     return {

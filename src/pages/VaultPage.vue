@@ -1,104 +1,205 @@
 <template>
-  <q-page class="q-pa-md">
-    <!-- Oracle Status Section -->
-    <q-card flat bordered class="q-mb-md">
-      <q-card-section class="row items-center q-gutter-md">
-        <div v-if="priceLoading" class="row items-center q-gutter-sm">
-          <q-spinner-dots color="primary" size="32px" />
-          <span>Fetching Oracle price...</span>
-        </div>
-        <div v-else-if="oracleSuccess" class="row items-center q-gutter-sm full-width">
-          <q-icon name="check_circle" color="positive" size="32px" />
-          <div>
-            <div class="text-subtitle1 text-weight-medium text-positive">Oracle data received</div>
-            <div class="text-caption text-grey-7">
-              Current BCH price is live from Oracle backend
-            </div>
-          </div>
-          <q-btn
+  <q-page class="q-pa-lg" style="background-color: #121212">
+    <div class="container">
+      <div class="row justify-center">
+        <div class="col-12 col-md-8 col-lg-6">
+          <!-- Oracle Status Section -->
+          <q-card
             flat
-            dense
-            round
-            icon="refresh"
-            @click="refreshPrice"
-            label="Refresh"
-            class="q-ml-auto"
-          />
-        </div>
-        <div v-else class="row items-center q-gutter-sm">
-          <q-icon name="warning" color="orange" size="32px" />
-          <span
-            >Oracle price unavailable. Check that the backend is running at
-            https://oracle1.mainnet.cash</span
+            bordered
+            class="q-mb-lg"
+            style="background-color: #1e1e1e; border-color: #333"
           >
-          <q-btn flat dense label="Retry" @click="refreshPrice" />
-        </div>
-      </q-card-section>
-    </q-card>
-
-    <!-- Create Vault Section -->
-    <q-card flat bordered class="q-mb-md">
-      <q-card-section>
-        <div class="text-h6 q-mb-md">Create Vault</div>
-        <q-form @submit="onLockFunds" class="q-gutter-md">
-          <q-input
-            v-model.number="form.amount"
-            label="Amount to Deposit into Vault"
-            type="number"
-            outlined
-            :rules="[
-              (val) => val > 0 || 'Amount must be greater than 0',
-              (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
-            ]"
-            hint="This amount will be requested from your Paytaca wallet to fund contract (in satoshis)."
-          />
-          <q-input
-            v-model.number="form.priceTarget"
-            label="USD Price Target"
-            type="number"
-            outlined
-            step="0.01"
-            :rules="[(val) => val > 0 || 'Price target must be greater than 0']"
-            hint="Target BCH/USD price to unlock funds"
-          />
-
-          <!-- Auto-Withdrawal Option -->
-          <q-toggle
-            v-model="enableAutoWithdrawal"
-            label="Enable Auto-Withdrawal (Create, Fund, Forget)"
-            color="primary"
-            class="q-mt-md"
-          >
-            <q-tooltip>
-              Automatically withdraw funds when price target is met. Requires pre-signing multiple
-              transactions.
-            </q-tooltip>
-          </q-toggle>
-
-          <div v-if="enableAutoWithdrawal" class="q-mt-sm">
-            <q-banner class="bg-info text-white">
-              <template v-slot:avatar>
-                <q-icon name="auto_awesome" />
-              </template>
-              <div class="text-body2">
-                <strong>Create, Fund, Forget Mode:</strong><br />
-                • Pre-sign withdrawal transactions for multiple price targets<br />
-                • System automatically monitors price and executes withdrawal<br />
-                • No manual action required when target is met<br />
-                • You'll be asked to sign multiple transactions during vault creation
+            <q-card-section class="row items-center q-gutter-md">
+              <div v-if="priceLoading" class="row items-center q-gutter-sm">
+                <q-spinner-dots color="primary" size="32px" />
+                <span class="text-grey-4">Fetching Oracle price...</span>
               </div>
+              <div v-else-if="oracleSuccess" class="row items-center q-gutter-sm full-width">
+                <q-icon name="check_circle" color="positive" size="32px" />
+                <div>
+                  <div class="text-subtitle1 text-weight-medium text-positive">
+                    Oracle data received
+                  </div>
+                  <div class="text-caption text-grey-6">
+                    Current BCH price is live from Oracle backend
+                  </div>
+                </div>
+                <q-btn
+                  flat
+                  dense
+                  round
+                  icon="refresh"
+                  @click="refreshPrice"
+                  label="Refresh"
+                  class="q-ml-auto text-primary"
+                />
+              </div>
+              <div v-else class="row items-center q-gutter-sm">
+                <q-icon name="warning" color="orange" size="32px" />
+                <span class="text-grey-4">
+                  Oracle price unavailable. Check that the backend is running at
+                  https://oracle1.mainnet.cash
+                </span>
+                <q-btn flat dense label="Retry" @click="refreshPrice" color="primary" />
+              </div>
+            </q-card-section>
+          </q-card>
+
+          <!-- Create Vault Section -->
+          <q-card
+            flat
+            bordered
+            class="q-mb-lg"
+            style="background-color: #1e1e1e; border-color: #333"
+          >
+            <q-card-section class="text-center">
+              <h2 class="text-h4 text-weight-bold text-white q-mb-md">Create New Vault</h2>
+              <p class="text-grey-6 q-mb-lg">Lock your BCH until your target price is reached</p>
+            </q-card-section>
+
+            <q-card-section>
+              <q-form @submit="onLockFunds" class="q-gutter-md">
+                <!-- Connected Address Display -->
+                <div class="q-mb-lg">
+                  <q-card
+                    flat
+                    bordered
+                    class="q-pa-md"
+                    style="background-color: #2a2a2a; border-color: #444"
+                  >
+                    <div class="text-subtitle2 text-grey-4 q-mb-sm">Connected Address</div>
+                    <div class="text-caption text-primary q-mb-xs">
+                      {{ walletAddress || 'Not Connected' }}
+                    </div>
+                    <div class="text-caption text-grey-6">
+                      Balance: {{ walletBalance || '0' }} BCH
+                    </div>
+                  </q-card>
+                </div>
+
+                <!-- Amount Input -->
+                <div class="q-mb-lg">
+                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                    Amount to Deposit (satoshis)
+                  </label>
+                  <q-input
+                    v-model.number="form.amount"
+                    type="number"
+                    outlined
+                    dark
+                    placeholder="Enter amount in satoshis"
+                    class="text-h6"
+                    input-class="text-center"
+                    style="background-color: #2a2a2a"
+                    :rules="[
+                      (val) => val > 0 || 'Amount must be greater than 0',
+                      (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
+                    ]"
+                    hint="This amount will be requested from your Paytaca wallet to fund contract"
+                    persistent-hint
+                  >
+                    <template v-slot:prepend>
+                      <q-icon name="currency_bitcoin" color="primary" />
+                    </template>
+                  </q-input>
+                </div>
+
+                <!-- Target Price Input -->
+                <div class="q-mb-lg">
+                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                    Target Price (USD)
+                  </label>
+                  <q-input
+                    v-model.number="form.priceTarget"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    outlined
+                    dark
+                    placeholder="Enter your target price per BCH"
+                    class="text-h6"
+                    input-class="text-center"
+                    style="background-color: #2a2a2a"
+                    :rules="[(val) => val > 0 || 'Price target must be greater than 0']"
+                    :hint="
+                      currentBchPrice
+                        ? `Current BCH Price: $${currentBchPrice}`
+                        : 'Fetching current price...'
+                    "
+                    persistent-hint
+                  >
+                    <template v-slot:prepend>
+                      <q-icon name="attach_money" color="primary" />
+                    </template>
+                    <template v-slot:append>
+                      <q-spinner v-if="priceLoading" size="sm" color="primary" />
+                    </template>
+                  </q-input>
+                </div>
+
+                <!-- Auto-Withdrawal Option -->
+                <div class="q-mb-lg">
+                  <q-toggle
+                    v-model="enableAutoWithdrawal"
+                    label="Enable Auto-Withdrawal (Create, Fund, Forget)"
+                    color="primary"
+                    size="lg"
+                    class="text-grey-4"
+                  >
+                    <q-tooltip>
+                      Automatically withdraw funds when price target is met. Requires pre-signing
+                      multiple transactions.
+                    </q-tooltip>
+                  </q-toggle>
+
+                  <div v-if="enableAutoWithdrawal" class="q-mt-sm">
+                    <q-banner class="bg-primary text-black">
+                      <template v-slot:avatar>
+                        <q-icon name="auto_awesome" />
+                      </template>
+                      <div class="text-body2">
+                        <strong>Create, Fund, Forget Mode:</strong><br />
+                        • Pre-sign withdrawal transactions for multiple price targets<br />
+                        • System automatically monitors price and executes withdrawal<br />
+                        • No manual action required when target is met<br />
+                        • You'll be asked to sign multiple transactions during vault creation
+                      </div>
+                    </q-banner>
+                  </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="row justify-center q-mt-lg">
+                  <q-btn
+                    type="submit"
+                    color="primary"
+                    label="LOCK FUNDS"
+                    :loading="locking || depositing"
+                    :disable="!canLockFunds"
+                    icon="lock"
+                    size="lg"
+                    class="text-weight-bold"
+                    style="background-color: #00d588; color: #000"
+                    padding="md xl"
+                  />
+                </div>
+              </q-form>
+            </q-card-section>
+          </q-card>
+
+          <!-- Wallet Connection Status -->
+          <div v-if="!hasWallet" class="q-mt-md">
+            <q-banner class="bg-warning text-dark">
+              <template v-slot:avatar>
+                <q-icon name="warning" />
+              </template>
+              Connect your wallet to create a vault.
+              <template v-slot:action>
+                <q-btn color="primary" label="Connect Wallet" @click="$router.push('/')" />
+              </template>
             </q-banner>
           </div>
-
-          <q-btn
-            v-if="hasWallet && hasPublicKey"
-            type="submit"
-            color="primary"
-            label="LOCK FUNDS"
-            :loading="locking || depositing"
-            :disable="!canLockFunds"
-            icon="lock"
-          />
           <div v-else-if="hasWallet && !hasPublicKey" class="q-mt-md">
             <q-banner class="bg-warning text-dark">
               <template v-slot:avatar>
@@ -120,209 +221,236 @@
           <div v-else class="q-mt-md text-grey-7">
             Connect your wallet and verify your identity to create a vault.
           </div>
-        </q-form>
-        <div v-if="depositing" class="q-mt-sm">
-          <q-banner class="bg-info text-white">
-            <template v-slot:avatar>
-              <q-spinner-dots color="white" size="24px" />
-            </template>
-            Waiting for Deposit... Confirm payment in your Paytaca wallet.
-          </q-banner>
-        </div>
-      </q-card-section>
-    </q-card>
 
-    <!-- Vault Status Section -->
-    <q-card v-if="vault" flat bordered>
-      <q-card-section>
-        <div class="text-h6 q-mb-md">Vault Status</div>
-        <div class="q-gutter-md">
-          <div>
-            <div class="text-subtitle2 q-mb-xs">Contract Address</div>
-            <q-input
-              :model-value="vault.contractAddress"
-              readonly
-              outlined
-              dense
-              class="monospace"
-              input-class="text-select"
-            />
-          </div>
-          <div>
-            <div class="text-subtitle2 q-mb-xs">Balance</div>
-            <div class="row items-center q-gutter-sm">
-              <q-input
-                :model-value="formatBalance(displayBalance)"
-                readonly
-                outlined
-                dense
-                suffix="satoshis"
-                class="col"
-              />
-              <q-btn
-                flat
-                dense
-                round
-                icon="refresh"
-                color="primary"
-                :loading="balanceRefreshing"
-                @click="refreshVaultBalance"
-                aria-label="Refresh balance from blockchain"
-              />
-            </div>
-            <p class="text-caption text-grey-7 q-mt-xs q-mb-none">
-              Live from chipnet blockchain. Clearing site data does not move funds—your vault
-              address stays the same; re-enter the same vault settings to see this balance again.
-            </p>
-            <a
-              v-if="vault && vault.contractAddress"
-              :href="chipnetExplorerAddressUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-caption text-primary"
-            >
-              Verify balance on chipnet explorer →
-            </a>
-          </div>
-          <div>
-            <div class="text-subtitle2 q-mb-xs">Deposit More into Vault</div>
-            <div class="row q-col-gutter-sm items-center">
-              <div class="col-12 col-md-6">
-                <q-input
-                  v-model.number="additionalDepositAmount"
-                  label="Additional amount (satoshis)"
-                  type="number"
-                  outlined
-                  dense
-                  :rules="[
-                    (val) => !!val || 'Amount is required',
-                    (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
-                  ]"
-                  hint="Send more BCH into this vault using your Paytaca wallet."
-                />
-              </div>
-              <div class="col-auto q-mt-sm q-mt-md-none">
-                <q-btn
-                  color="primary"
-                  label="Deposit More"
-                  :loading="depositing"
-                  :disable="!canDepositMore"
-                  icon="account_balance_wallet"
-                  @click="onDepositMore"
-                />
-              </div>
-            </div>
-          </div>
-          <div>
-            <div class="text-subtitle2 q-mb-xs">Vault Deposit QR</div>
-            <div class="row items-center q-gutter-md">
-              <q-card flat bordered class="q-pa-sm flex flex-center">
-                <QrcodeVue :value="vault.contractAddress" :size="160" />
-              </q-card>
-              <div class="text-body2 text-grey-7">
-                Scan this QR in Paytaca to fill the vault address automatically, then enter the
-                amount you want to send.
-              </div>
-            </div>
-          </div>
-          <div>
-            <div class="text-subtitle2 q-mb-xs">Target Price</div>
-            <q-input :model-value="`$${vault.priceTarget.toFixed(2)}`" readonly outlined dense />
-          </div>
-          <div>
-            <div class="text-subtitle2 q-mb-xs">Current BCH Price (Oracle)</div>
-            <q-input
-              :model-value="
-                currentBchPrice != null ? `$${Number(currentBchPrice).toFixed(2)}` : '—'
-              "
-              readonly
-              outlined
-              dense
-              :color="canWithdraw ? 'positive' : 'negative'"
-            />
-          </div>
-          <p class="text-caption text-grey-7">
-            Withdrawal sends vault funds to your original funding address automatically. Your
-            Paytaca must approve the transaction, like receiving from a faucet—you provide the
-            address, then confirm in wallet.
-          </p>
-          <q-btn
-            color="primary"
-            label="Withdraw"
-            :loading="withdrawing"
-            :disable="!canWithdraw"
-            icon="account_balance"
-            @click="onWithdraw"
-          />
-          <div v-if="!canWithdraw && vault" class="text-caption text-negative q-mt-xs">
-            Current price (${ currentBchPrice != null ? Number(currentBchPrice).toFixed(2) : '?' }})
-            is below target price (${{ vault.priceTarget.toFixed(2) }})
-          </div>
-
-          <!-- Auto-Withdrawal Status -->
-          <div v-if="enableAutoWithdrawal" class="q-mt-md">
-            <q-banner class="bg-positive text-white">
+          <!-- Deposit Status -->
+          <div v-if="depositing" class="q-mt-sm">
+            <q-banner class="bg-info text-white">
               <template v-slot:avatar>
-                <q-icon name="auto_awesome" />
+                <q-spinner-dots color="white" size="24px" />
               </template>
-              <div class="text-body2">
-                <strong>Auto-Withdrawal Active</strong><br />
-                • System will automatically withdraw when price target is met<br />
-                • No manual action required<br />
-                • Funds will return to: {{ vault.originalFundingAddress }}
-              </div>
+              Waiting for Deposit... Confirm payment in your Paytaca wallet.
             </q-banner>
           </div>
         </div>
-      </q-card-section>
-    </q-card>
+      </div>
+    </div>
 
-    <!-- Developer Info (toggle) -->
-    <q-card v-if="vault" flat bordered class="q-mt-md">
-      <q-card-section>
-        <q-expansion-item icon="bug_report" label="Developer Info" dense>
-          <div class="q-gutter-md q-mt-sm">
-            <q-input
-              label="Owner PKH (hex)"
-              :model-value="developerOwnerPkh"
-              readonly
-              outlined
-              dense
-              class="monospace"
-              input-class="text-select"
-            />
-            <q-input
-              label="Price Target (cents)"
-              :model-value="developerPriceTargetCents"
-              readonly
-              outlined
-              dense
-            />
-            <q-input
-              label="Connected Chain ID"
-              :model-value="developerChainId"
-              readonly
-              outlined
-              dense
-            />
-            <q-input
-              label="Oracle Source"
-              value="Mainnet.cash Production Oracle"
-              readonly
-              outlined
-              dense
-            />
-          </div>
-        </q-expansion-item>
-      </q-card-section>
-    </q-card>
+    <!-- Vault Status Section -->
+    <div v-if="vault" class="container q-mt-lg">
+      <div class="row justify-center">
+        <div class="col-12 col-md-8 col-lg-6">
+          <q-card flat bordered style="background-color: #1e1e1e; border-color: #333">
+            <q-card-section>
+              <h3 class="text-h5 text-weight-bold text-white q-mb-md">Vault Status</h3>
 
+              <!-- Contract Address -->
+              <div class="q-mb-lg">
+                <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                  Contract Address
+                </label>
+                <q-input
+                  :model-value="vault.contractAddress"
+                  readonly
+                  outlined
+                  dark
+                  class="monospace text-primary"
+                  input-class="text-select"
+                  style="background-color: #2a2a2a"
+                />
+              </div>
+
+              <!-- Balance -->
+              <div class="q-mb-lg">
+                <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                  Balance
+                </label>
+                <div class="row items-center q-gutter-sm">
+                  <q-input
+                    :model-value="formatBalance(displayBalance)"
+                    readonly
+                    outlined
+                    dark
+                    suffix="satoshis"
+                    class="col"
+                    style="background-color: #2a2a2a"
+                  />
+                  <q-btn
+                    flat
+                    dense
+                    round
+                    icon="refresh"
+                    color="primary"
+                    :loading="balanceRefreshing"
+                    @click="refreshVaultBalance"
+                    aria-label="Refresh balance from blockchain"
+                  />
+                </div>
+                <p class="text-caption text-grey-6 q-mt-xs q-mb-none">
+                  Live from chipnet blockchain. Clearing site data does not move funds—your vault
+                  address stays the same; re-enter the same vault settings to see this balance
+                  again.
+                </p>
+                <a
+                  v-if="vault && vault.contractAddress"
+                  :href="chipnetExplorerAddressUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-caption text-primary"
+                >
+                  Verify balance on chipnet explorer →
+                </a>
+              </div>
+
+              <!-- Deposit More -->
+              <div class="q-mb-lg">
+                <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                  Deposit More into Vault
+                </label>
+                <div class="row q-col-gutter-sm items-center">
+                  <div class="col-12 col-md-6">
+                    <q-input
+                      v-model.number="additionalDepositAmount"
+                      label="Additional amount (satoshis)"
+                      type="number"
+                      outlined
+                      dark
+                      style="background-color: #2a2a2a"
+                      :rules="[
+                        (val) => !!val || 'Amount is required',
+                        (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
+                      ]"
+                      hint="Send more BCH into this vault using your Paytaca wallet."
+                    />
+                  </div>
+                  <div class="col-auto q-mt-sm q-mt-md-none">
+                    <q-btn
+                      color="primary"
+                      label="Deposit More"
+                      :loading="depositing"
+                      :disable="!canDepositMore"
+                      icon="account_balance_wallet"
+                      style="background-color: #00d588; color: #000"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- QR Code -->
+              <div class="q-mb-lg">
+                <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                  Vault Deposit QR
+                </label>
+                <div class="row items-center q-gutter-md">
+                  <q-card
+                    flat
+                    bordered
+                    class="q-pa-sm flex flex-center"
+                    style="background-color: #2a2a2a; border-color: #444"
+                  >
+                    <QrcodeVue :value="vault.contractAddress" :size="160" />
+                  </q-card>
+                  <div class="text-body2 text-grey-6">
+                    Scan this QR in Paytaca to fill the vault address automatically, then enter the
+                    amount you want to send.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Price Information -->
+              <div class="row q-gutter-md q-mb-lg">
+                <div class="col-12 col-md-6">
+                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                    Target Price
+                  </label>
+                  <q-input
+                    :model-value="`$${vault.priceTarget.toFixed(2)}`"
+                    readonly
+                    outlined
+                    dark
+                    style="background-color: #2a2a2a"
+                  />
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                    Current BCH Price (Oracle)
+                  </label>
+                  <q-input
+                    :model-value="
+                      currentBchPrice != null ? `$${Number(currentBchPrice).toFixed(2)}` : '—'
+                    "
+                    readonly
+                    outlined
+                    dark
+                    :color="canWithdraw ? 'positive' : 'negative'"
+                    style="background-color: #2a2a2a"
+                  />
+                </div>
+              </div>
+
+              <!-- Withdrawal Section -->
+              <div class="q-mb-lg">
+                <p class="text-caption text-grey-6 q-mb-md">
+                  Withdrawal sends vault funds to your original funding address automatically. Your
+                  Paytaca must approve the transaction, like receiving from a faucet—you provide the
+                  address, then confirm in wallet.
+                </p>
+                <div class="row justify-center">
+                  <q-btn
+                    color="primary"
+                    label="Withdraw"
+                    :loading="withdrawing"
+                    :disable="!canWithdraw"
+                    icon="account_balance"
+                    size="lg"
+                    class="text-weight-bold"
+                    style="background-color: #00d588; color: #000"
+                    padding="md xl"
+                    @click="onWithdraw"
+                  />
+                </div>
+                <div
+                  v-if="!canWithdraw && vault"
+                  class="text-caption text-negative q-mt-xs text-center"
+                >
+                  Current price (${ currentBchPrice != null ? Number(currentBchPrice).toFixed(2) :
+                  '?' }}) is below target price (${{ vault.priceTarget.toFixed(2) }})
+                </div>
+              </div>
+
+              <!-- Auto-Withdrawal Status -->
+              <div v-if="enableAutoWithdrawal" class="q-mt-md">
+                <q-banner class="bg-positive text-white">
+                  <template v-slot:avatar>
+                    <q-icon name="auto_awesome" />
+                  </template>
+                  <div class="text-body2">
+                    <strong>Auto-Withdrawal Active</strong><br />
+                    • System will automatically withdraw when price target is met<br />
+                    • No manual action required<br />
+                    • Funds will return to: {{ vault.originalFundingAddress }}
+                  </div>
+                </q-banner>
+              </div>
+            </q-card-section>
+          </q-card>
+        </div>
+      </div>
+    </div>
     <!-- Empty State -->
-    <q-card v-else flat bordered>
-      <q-card-section class="text-center text-grey-6">
-        No active vault. Create a vault above to get started.
-      </q-card-section>
-    </q-card>
+    <div v-if="!vault" class="container q-mt-lg">
+      <div class="row justify-center">
+        <div class="col-12 col-md-8 col-lg-6">
+          <q-card
+            flat
+            bordered
+            class="text-center q-pa-lg"
+            style="background-color: #1e1e1e; border-color: #333"
+          >
+            <div class="text-grey-6">No active vault. Create a vault above to get started.</div>
+          </q-card>
+        </div>
+      </div>
+    </div>
   </q-page>
 </template>
 
@@ -430,6 +558,11 @@ export default defineComponent({
 
     walletAddress() {
       return this.$store.state.wallet?.address ?? null
+    },
+
+    walletBalance() {
+      // This would need to be implemented based on your wallet store structure
+      return this.$store.state.wallet?.balance ?? '0'
     },
 
     developerOwnerPkh() {

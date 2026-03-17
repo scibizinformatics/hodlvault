@@ -19,7 +19,10 @@ import { tryDirectPaytacaSigning } from './direct-signing'
 
 // Placeholders for WalletConnect: wallet replaces these when signing (wc2-bch-bcr)
 const placeholderPublicKey = () => new Uint8Array(33)
-const placeholderSignature = () => new Uint8Array(65)
+const placeholderSignature = () => ({
+  signature: new Uint8Array(65), // Placeholder 65-byte signature
+  sighashType: 0x41, // SIGHASH_ALL | SIGHASH_UTXOS for covenant compatibility
+})
 
 /** Serialize object for JSON RPC (BigInt → string, Uint8Array → hex) */
 function serializeForWc(obj) {
@@ -204,7 +207,7 @@ export async function spendVault(
 
     // Conservative but smaller miner fee; the TransactionBuilder will still
     // compute final size-based fee when broadcasting.
-    const minerFee = 400n
+    const minerFee = 1000n
     const amount = utxo.satoshis - minerFee
     if (amount <= 0n) {
       throw new Error('Insufficient balance to cover miner fee')
@@ -311,14 +314,7 @@ export async function spendVault(
           async () => {
             console.log('DEBUG: ATTEMPT 5 - BREAKTHROUGH: Manual raw transaction...')
             const { tryManualRawTransaction } = await import('./ultimate-withdrawal-solutions.js')
-            const ownerPkHexValue = ownerPkHex || ''
-            return await tryManualRawTransaction(
-              contract,
-              ownerPkHexValue,
-              ownerAddress,
-              oracleMessageHex,
-              oracleSigHex,
-            )
+            return await tryManualRawTransaction()
           },
 
           // ATTEMPT 5: BREAKTHROUGH - QR code transaction
@@ -350,7 +346,7 @@ export async function spendVault(
           async () => {
             console.log('DEBUG: ATTEMPT 8 - BREAKTHROUGH: Manual hex generation...')
             const { tryManualHexGeneration } = await import('./ultimate-withdrawal-solutions.js')
-            return await tryManualHexGeneration(contract, ownerAddress, amount)
+            return await tryManualHexGeneration()
           },
 
           // ATTEMPT 9: BREAKTHROUGH - Contract simulation

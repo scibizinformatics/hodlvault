@@ -3,7 +3,7 @@
  * Multiple breakthrough approaches for HodlVault withdrawal
  */
 
-import { hexToBin, binToHex } from '@bitauth/libauth'
+import { hexToBin } from '@bitauth/libauth'
 
 /**
  * BREAKTHROUGH 1: CashScript Contract-Based Approach
@@ -26,7 +26,7 @@ export async function tryCashScriptContractApproach(
     }
 
     const utxo = utxos[0]
-    const fee = 400n
+    const fee = 1000n
     const sendAmount = utxo.satoshis - fee
 
     if (sendAmount <= 0n) {
@@ -50,9 +50,11 @@ export async function tryCashScriptContractApproach(
     const oracleSig = hexToBin(oracleSigHex)
 
     // Create placeholder signature template for owner (will be filled by wallet)
+    // IMPORTANT: Paytaca needs SIGHASH_ALL | SIGHASH_UTXOS (0x41) for covenant contracts
     const ownerSigTemplate = {
       signature: new Uint8Array(64), // Placeholder 64-byte signature
       publicKey: hexToBin(ownerPkHex || '00'.repeat(33)), // Placeholder or actual owner key
+      sighashType: 0x41, // SIGHASH_ALL | SIGHASH_UTXOS for covenant compatibility
     }
 
     // Build transaction exactly like CashScript examples
@@ -101,7 +103,7 @@ export async function tryDirectTransactionConstruction(contract, ownerAddress) {
     }
 
     const utxo = utxos[0] // Use first UTXO
-    const fee = 400n
+    const fee = 1000n
     const sendAmount = utxo.satoshis - fee
 
     if (sendAmount <= 0n) {
@@ -144,57 +146,16 @@ export async function tryDirectTransactionConstruction(contract, ownerAddress) {
 
 /**
  * BREAKTHROUGH 2: Manual Raw Transaction with Pre-built Unlocking Script
- * Create the exact unlocking script Paytaca expects
+ * DISABLED - createRawTransactionHex helper is not properly implemented
  */
-export async function tryManualRawTransaction(contract, ownerPkHex, ownerAddress) {
-  console.log('BREAKTHROUGH 2: Manual raw transaction with pre-built unlocking script...')
+export async function tryManualRawTransaction() {
+  console.log('BREAKTHROUGH 2: Manual raw transaction with pre-built unlocking script - DISABLED')
 
-  try {
-    const utxos = await contract.getUtxos()
-
-    if (!utxos.length) {
-      throw new Error('No UTXOs available')
-    }
-
-    const utxo = utxos[0]
-    const fee = 400n
-    const sendAmount = utxo.satoshis - fee
-
-    if (sendAmount <= 0n) {
-      throw new Error('Insufficient balance for fee')
-    }
-
-    // Create the unlocking script template manually
-    // This is the critical part - we need to match exactly what Paytaca expects
-
-    // 1. Owner public key (33 bytes compressed)
-    const ownerPkBin = hexToBin(ownerPkHex)
-
-    // Build the unlocking script manually
-    // This might be more compatible with Paytaca than CashScript's approach
-    const unlockingScript = new Uint8Array([
-      ...ownerPkBin, // Owner public key
-    ])
-
-    // Create raw transaction hex
-    const rawTx = createRawTransactionHex(utxo, ownerAddress, sendAmount, fee, unlockingScript)
-
-    console.log('Manual raw transaction created:', {
-      txLength: rawTx.length,
-      unlockingScriptLength: unlockingScript.length,
-      ownerPkLength: ownerPkBin.length,
-    })
-
-    return {
-      success: true,
-      method: 'manual_raw_transaction',
-      rawTransaction: binToHex(rawTx),
-      unlockingScript: binToHex(unlockingScript),
-      message: 'Manual raw transaction created. Please sign with Paytaca.',
-    }
-  } catch (error) {
-    console.error('Manual raw transaction failed:', error.message)
-    throw error
+  return {
+    success: false,
+    method: 'manual_raw_transaction',
+    error: 'Method disabled due to incomplete createRawTransactionHex implementation',
+    message: 'This method is disabled to prevent sending invalid hex to Paytaca.',
   }
 }
 
@@ -213,7 +174,7 @@ export async function tryStepByStepBuilder(contract, ownerAddress) {
     }
 
     const utxo = utxos[0]
-    const fee = 400n
+    const fee = 1000n
     const sendAmount = utxo.satoshis - fee
 
     if (sendAmount <= 0n) {
@@ -407,79 +368,16 @@ export async function tryAlternativeWalletConnectMethods(walletConnectRequest, t
 
 /**
  * BREAKTHROUGH 7: Manual Transaction Hex Generation
- * Generate the exact transaction hex Paytaca expects
+ * DISABLED - createRawTransactionHex helper is not properly implemented
  */
-export async function tryManualHexGeneration(contract, ownerAddress) {
-  console.log('BREAKTHROUGH 7: Manual transaction hex generation...')
+export async function tryManualHexGeneration() {
+  console.log('BREAKTHROUGH 7: Manual transaction hex generation - DISABLED')
 
-  try {
-    const utxos = await contract.getUtxos()
-
-    if (!utxos.length) {
-      throw new Error('No UTXOs available')
-    }
-
-    const utxo = utxos[0]
-    const fee = 400n
-    const sendAmount = utxo.satoshis - fee
-
-    if (sendAmount <= 0n) {
-      throw new Error('Insufficient balance for fee')
-    }
-
-    // Create manual transaction hex
-    // This is a simplified BCH transaction structure
-    const version = Buffer.from([0x01, 0x00, 0x00, 0x00]) // Version 1
-
-    // Input count (1 input)
-    const inputCount = Buffer.from([0x01])
-
-    // Input (UTXO)
-    const txid = Buffer.from(utxo.txid, 'hex').reverse() // Reverse for little-endian
-    const vout = Buffer.from([utxo.vout])
-    const scriptSig = Buffer.from([]) // Empty script sig (will be filled by wallet)
-    const sequence = Buffer.from([0xff, 0xff, 0xff, 0xff]) // Max sequence
-
-    // Output count (1 output)
-    const outputCount = Buffer.from([0x01])
-
-    // Output
-    const satoshis = Buffer.from(sendAmount.toString(16).padStart(16, '0'), 'hex').reverse()
-    const addressScript = createAddressScript(ownerAddress)
-
-    // Locktime
-    const locktime = Buffer.from([0x00, 0x00, 0x00, 0x00])
-
-    // Combine all parts
-    const transactionHex = Buffer.concat([
-      version,
-      inputCount,
-      txid,
-      vout,
-      Buffer.from([scriptSig.length]),
-      scriptSig,
-      sequence,
-      outputCount,
-      satoshis,
-      Buffer.from([addressScript.length]),
-      addressScript,
-      locktime,
-    ])
-
-    console.log('Manual transaction hex generated:', {
-      hexLength: transactionHex.length,
-      hex: binToHex(transactionHex),
-    })
-
-    return {
-      success: true,
-      method: 'manual_hex_generation',
-      transactionHex: binToHex(transactionHex),
-      message: 'Manual transaction hex generated. Please sign with your wallet.',
-    }
-  } catch (error) {
-    console.error('Manual hex generation failed:', error.message)
-    throw error
+  return {
+    success: false,
+    method: 'manual_hex_generation',
+    error: 'Method disabled due to incomplete createRawTransactionHex implementation',
+    message: 'This method is disabled to prevent sending invalid hex to Paytaca.',
   }
 }
 
@@ -498,7 +396,7 @@ export async function tryManualInstructions(contract, ownerAddress) {
     }
 
     const utxo = utxos[0]
-    const fee = 400n
+    const fee = 1000n
     const sendAmount = utxo.satoshis - fee
 
     if (sendAmount <= 0n) {
@@ -574,7 +472,7 @@ export async function tryQRCodeTransaction(contract, ownerAddress, amount) {
     }
 
     const utxo = utxos[0]
-    const fee = 400n
+    const fee = 1000n
     const sendAmount = amount || utxo.satoshis - fee
 
     if (sendAmount <= 0n) {

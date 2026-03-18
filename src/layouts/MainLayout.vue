@@ -65,93 +65,111 @@ export default defineComponent({
   data() {
     return {
       connecting: false,
+      walletWatchInterval: null,
     }
   },
 
   computed: {
     connectedAddress() {
-      return this.$store.getters['wallet/walletInfo']?.address ?? null
-    },
-
-    connectionStatus() {
-      return this.$store.getters['wallet/isConnected']
+      return this.$store.state.wallet?.address ?? null
     },
 
     shortAddress() {
-      return this.$store.getters['wallet/walletInfo']?.shortAddress ?? null
+      if (!this.connectedAddress) return ''
+      const addr = this.connectedAddress
+      return `${addr.slice(0, 8)}...${addr.slice(-8)}`
     },
   },
 
+  mounted() {
+    // Start watching wallet connection status changes
+    this.startWalletStatusWatcher()
+  },
+
+  beforeUnmount() {
+    // Clean up wallet status watcher
+    this.stopWalletStatusWatcher()
+  },
+
   methods: {
+    startWalletStatusWatcher() {
+      // Clear any existing interval
+      this.stopWalletStatusWatcher()
+
+      // Watch for wallet connection status changes every 2 seconds
+      this.walletWatchInterval = setInterval(() => {
+        this.checkWalletConnectionStatus()
+      }, 2000)
+    },
+
+    stopWalletStatusWatcher() {
+      if (this.walletWatchInterval) {
+        clearInterval(this.walletWatchInterval)
+        this.walletWatchInterval = null
+      }
+    },
+
+    checkWalletConnectionStatus() {
+      const currentAddress = this.$store.state.wallet?.address ?? null
+      const walletConnectConnected = this.$walletConnect?.isConnected() ?? false
+
+      // If WalletConnect says disconnected but store still has address, clear store
+      if (!walletConnectConnected && currentAddress) {
+        console.log('Wallet status mismatch detected - clearing wallet state')
+        this.$store.dispatch('wallet/clearWallet')
+      }
+
+      // If WalletConnect says connected but store has no address, try to restore
+      if (walletConnectConnected && !currentAddress) {
+        console.log('Wallet status mismatch detected - attempting to restore session')
+        // The walletconnect boot file should handle session restoration automatically
+        // But we can trigger a manual check if needed
+      }
+    },
+
     async onConnectWallet() {
       this.connecting = true
       try {
         if (!this.$walletConnect) {
           throw new Error('WalletConnect not initialized')
         }
-
-        const address = await this.$walletConnect.connect()
-
-        if (address) {
-          this.$q.notify({
-            type: 'positive',
-            message: `Connected to Paytaca`,
-            icon: 'check_circle',
-            timeout: 2000,
-          })
-        } else {
-          throw new Error('No address returned from wallet')
-        }
+        await this.$walletConnect.connect()
+        this.$q.notify({
+          type: 'positive',
+          message: 'Connected to Paytaca',
+          icon: 'check_circle',
+        })
       } catch (err) {
-        console.error('Connection failed:', err)
         this.$q.notify({
           type: 'negative',
-          message: err?.message || 'Failed to connect wallet',
-          timeout: 3000,
+          message: err && err.message ? err.message : 'Failed to connect wallet',
         })
       } finally {
         this.connecting = false
       }
     },
 
-    async onDisconnectWallet() {
-      try {
-        this.$store.dispatch('wallet/clearWallet')
-
-        if (this.$walletConnect) {
-          await this.$walletConnect.disconnect()
-        }
-
-        this.$q.notify({
-          type: 'info',
-          message: 'Wallet disconnected',
-          icon: 'logout',
-          timeout: 2000,
-        })
-      } catch (err) {
-        console.error('Disconnect failed:', err)
-        this.$q.notify({
-          type: 'negative',
-          message: 'Failed to disconnect wallet',
-          timeout: 2000,
-        })
+    onDisconnectWallet() {
+      this.$store.dispatch('wallet/clearWallet')
+      if (this.$walletConnect) {
+        this.$walletConnect.disconnect()
       }
+      this.$q.notify({
+        type: 'info',
+        message: 'Wallet disconnected',
+      })
     },
 
     onMockConnect() {
       // Mock connection for testing
-      const mockWalletData = {
+      this.$store.dispatch('wallet/setWallet', {
         address: 'chipnet:qz4wqx8kjzlk7yalev0x8c8nppd6vqszxg5xqf8jrp',
         publicKey: '02d09613d20ce44da55956799863c0a5e82c5896a2df33502b4859664650529d2f',
-      }
-
-      this.$store.dispatch('wallet/setWallet', mockWalletData)
-
+      })
       this.$q.notify({
         type: 'positive',
         message: 'Mock connection established',
-        icon: 'bug_report',
-        timeout: 2000,
+        icon: 'check_circle',
       })
     },
   },

@@ -106,9 +106,15 @@ export async function getAddressBalance(address) {
  * @param {string} ownerPkhHex - Owner public key hash (20 bytes) as hex string
  * @param {string} oraclePkHex - Oracle public key (33 bytes compressed) as hex string
  * @param {number|bigint} priceTarget - Price target in satoshis or price units
+ * @param {string} [vaultSalt] - Optional unique salt to ensure unique contract addresses
  * @returns {Contract} Initialized contract instance
  */
-export function initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTarget) {
+export function initializeHodlVaultContract(
+  ownerPkhHex,
+  oraclePkHex,
+  priceTarget,
+  vaultSalt = null,
+) {
   const provider = getProvider()
 
   // Convert hex strings to bytes for constructor
@@ -118,7 +124,10 @@ export function initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTarge
   // Ensure priceTarget is a BigInt (CashScript expects int)
   const priceTargetBigInt = BigInt(priceTarget)
 
-  const constructorArgs = [ownerPkh, oraclePk, priceTargetBigInt]
+  // Generate unique salt if not provided (for new vaults)
+  const salt = vaultSalt ? hexToBin(vaultSalt) : crypto.getRandomValues(new Uint8Array(32))
+
+  const constructorArgs = [ownerPkh, oraclePk, priceTargetBigInt, salt]
 
   const contract = new Contract(HodlVaultArtifact, constructorArgs, {
     provider,
@@ -134,11 +143,17 @@ export function initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTarge
  * @param {string} ownerPkhHex - Owner public key hash (20 bytes) as hex string
  * @param {string} oraclePkHex - Oracle public key (33 bytes compressed) as hex string
  * @param {number|bigint} priceTarget - Price target
+ * @param {string} [vaultSalt] - Optional unique salt to ensure unique contract addresses
  * @returns {Promise<string>} Contract address (CashAddr format)
  */
-export async function calculateContractAddress(ownerPkhHex, oraclePkHex, priceTarget) {
+export async function calculateContractAddress(
+  ownerPkhHex,
+  oraclePkHex,
+  priceTarget,
+  vaultSalt = null,
+) {
   try {
-    const contract = initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTarget)
+    const contract = initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTarget, vaultSalt)
     return contract.address
   } catch (error) {
     throw new Error(`RAW CONTRACT ADDRESS ERROR: ${JSON.stringify(error, null, 2)}`)

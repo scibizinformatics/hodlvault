@@ -51,11 +51,15 @@ export class PreSigningService {
     const { TransactionBuilder } = await import('cashscript')
 
     try {
-      // Create contract instance
+      // Convert price target to cents for consistency
+      const priceTargetCents = Math.floor(priceTarget * 100)
+
+      // Create contract instance with vault's salt
       const contract = initializeHodlVaultContract(
         vault.ownerPkhHex,
         vault.oraclePkHex,
-        Math.floor(priceTarget * 100), // Convert to cents
+        priceTargetCents,
+        vault.vaultSalt, // Use vault's salt
       )
 
       // Get UTXOs (mock for template creation)
@@ -110,6 +114,7 @@ export class PreSigningService {
           txid: signatureResult.txid,
           sourceOutputs: wcPayload.sourceOutputs,
           priceTarget,
+          priceTargetCents, // Store cents for consistency
         }
       }
     } catch (error) {

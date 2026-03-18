@@ -78,6 +78,29 @@
                   </q-card>
                 </div>
 
+                <!-- Vault Name Input -->
+                <div class="q-mb-lg">
+                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                    Vault Name (Optional)
+                  </label>
+                  <q-input
+                    v-model="form.vaultName"
+                    type="text"
+                    outlined
+                    dark
+                    placeholder="My HODL Vault"
+                    class="text-h6"
+                    input-class="text-center"
+                    style="background-color: #2a2a2a"
+                    hint="Give your vault a memorable name"
+                    persistent-hint
+                  >
+                    <template v-slot:prepend>
+                      <q-icon name="edit" color="primary" />
+                    </template>
+                  </q-input>
+                </div>
+
                 <!-- Amount Input -->
                 <div class="q-mb-lg">
                   <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
@@ -234,253 +257,32 @@
         </div>
       </div>
     </div>
-
-    <!-- Vault Status Section -->
-    <div v-if="vault" class="container q-mt-lg">
-      <div class="row justify-center">
-        <div class="col-12 col-md-8 col-lg-6">
-          <q-card flat bordered style="background-color: #1e1e1e; border-color: #333">
-            <q-card-section>
-              <h3 class="text-h5 text-weight-bold text-white q-mb-md">Vault Status</h3>
-
-              <!-- Contract Address -->
-              <div class="q-mb-lg">
-                <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                  Contract Address
-                </label>
-                <q-input
-                  :model-value="vault.contractAddress"
-                  readonly
-                  outlined
-                  dark
-                  class="monospace text-primary"
-                  input-class="text-select"
-                  style="background-color: #2a2a2a"
-                />
-              </div>
-
-              <!-- Balance -->
-              <div class="q-mb-lg">
-                <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                  Balance
-                </label>
-                <div class="row items-center q-gutter-sm">
-                  <q-input
-                    :model-value="formatBalance(displayBalance)"
-                    readonly
-                    outlined
-                    dark
-                    suffix="satoshis"
-                    class="col"
-                    style="background-color: #2a2a2a"
-                  />
-                  <q-btn
-                    flat
-                    dense
-                    round
-                    icon="refresh"
-                    color="primary"
-                    :loading="balanceRefreshing"
-                    @click="refreshVaultBalance"
-                    aria-label="Refresh balance from blockchain"
-                  />
-                </div>
-                <p class="text-caption text-grey-6 q-mt-xs q-mb-none">
-                  Live from chipnet blockchain. Clearing site data does not move funds—your vault
-                  address stays the same; re-enter the same vault settings to see this balance
-                  again.
-                </p>
-                <a
-                  v-if="vault && vault.contractAddress"
-                  :href="chipnetExplorerAddressUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="text-caption text-primary"
-                >
-                  Verify balance on chipnet explorer →
-                </a>
-              </div>
-
-              <!-- Deposit More -->
-              <div class="q-mb-lg">
-                <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                  Deposit More into Vault
-                </label>
-                <div class="row q-col-gutter-sm items-center">
-                  <div class="col-12 col-md-6">
-                    <q-input
-                      v-model.number="additionalDepositAmount"
-                      label="Additional amount (satoshis)"
-                      type="number"
-                      outlined
-                      dark
-                      style="background-color: #2a2a2a"
-                      :rules="[
-                        (val) => !!val || 'Amount is required',
-                        (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
-                      ]"
-                      hint="Send more BCH into this vault using your Paytaca wallet."
-                    />
-                  </div>
-                  <div class="col-auto q-mt-sm q-mt-md-none">
-                    <q-btn
-                      color="primary"
-                      label="Deposit More"
-                      :loading="depositing"
-                      :disable="!canDepositMore"
-                      icon="account_balance_wallet"
-                      style="background-color: #00d588; color: #000"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <!-- QR Code -->
-              <div class="q-mb-lg">
-                <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                  Vault Deposit QR
-                </label>
-                <div class="row items-center q-gutter-md">
-                  <q-card
-                    flat
-                    bordered
-                    class="q-pa-sm flex flex-center"
-                    style="background-color: #2a2a2a; border-color: #444"
-                  >
-                    <QrcodeVue :value="vault.contractAddress" :size="160" />
-                  </q-card>
-                  <div class="text-body2 text-grey-6">
-                    Scan this QR in Paytaca to fill the vault address automatically, then enter the
-                    amount you want to send.
-                  </div>
-                </div>
-              </div>
-
-              <!-- Price Information -->
-              <div class="row q-gutter-md q-mb-lg">
-                <div class="col-12 col-md-6">
-                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                    Target Price
-                  </label>
-                  <q-input
-                    :model-value="`$${vault.priceTarget.toFixed(2)}`"
-                    readonly
-                    outlined
-                    dark
-                    style="background-color: #2a2a2a"
-                  />
-                </div>
-                <div class="col-12 col-md-6">
-                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                    Current BCH Price (Oracle)
-                  </label>
-                  <q-input
-                    :model-value="
-                      currentBchPrice != null ? `$${Number(currentBchPrice).toFixed(2)}` : '—'
-                    "
-                    readonly
-                    outlined
-                    dark
-                    :color="canWithdraw ? 'positive' : 'negative'"
-                    style="background-color: #2a2a2a"
-                  />
-                </div>
-              </div>
-
-              <!-- Withdrawal Section -->
-              <div class="q-mb-lg">
-                <p class="text-caption text-grey-6 q-mb-md">
-                  Withdrawal sends vault funds to your original funding address automatically. Your
-                  Paytaca must approve the transaction, like receiving from a faucet—you provide the
-                  address, then confirm in wallet.
-                </p>
-                <div class="row justify-center">
-                  <q-btn
-                    color="primary"
-                    label="Withdraw"
-                    :loading="withdrawing"
-                    :disable="!canWithdraw"
-                    icon="account_balance"
-                    size="lg"
-                    class="text-weight-bold"
-                    style="background-color: #00d588; color: #000"
-                    padding="md xl"
-                    @click="onWithdraw"
-                  />
-                </div>
-                <div
-                  v-if="!canWithdraw && vault"
-                  class="text-caption text-negative q-mt-xs text-center"
-                >
-                  Current price (${ currentBchPrice != null ? Number(currentBchPrice).toFixed(2) :
-                  '?' }}) is below target price (${{ vault.priceTarget.toFixed(2) }})
-                </div>
-              </div>
-
-              <!-- Auto-Withdrawal Status -->
-              <div v-if="enableAutoWithdrawal" class="q-mt-md">
-                <q-banner class="bg-positive text-white">
-                  <template v-slot:avatar>
-                    <q-icon name="auto_awesome" />
-                  </template>
-                  <div class="text-body2">
-                    <strong>Auto-Withdrawal Active</strong><br />
-                    • System will automatically withdraw when price target is met<br />
-                    • No manual action required<br />
-                    • Funds will return to: {{ vault.originalFundingAddress }}
-                  </div>
-                </q-banner>
-              </div>
-            </q-card-section>
-          </q-card>
-        </div>
-      </div>
-    </div>
-    <!-- Empty State -->
-    <div v-if="!vault" class="container q-mt-lg">
-      <div class="row justify-center">
-        <div class="col-12 col-md-8 col-lg-6">
-          <q-card
-            flat
-            bordered
-            class="text-center q-pa-lg"
-            style="background-color: #1e1e1e; border-color: #333"
-          >
-            <div class="text-grey-6">No active vault. Create a vault above to get started.</div>
-          </q-card>
-        </div>
-      </div>
-    </div>
   </q-page>
 </template>
 
 <script>
 import { defineComponent } from 'vue'
-import QrcodeVue from 'qrcode.vue'
 import {
   calculateContractAddress,
   initializeHodlVaultContract,
   getAddressBalance,
   depositToVault,
 } from 'src/services/blockchain'
-import { paytacaOptimizedWithdrawal } from 'src/services/paytaca-optimized-withdrawal'
 import { fetchOraclePrice, ORACLE_PUBKEY } from 'src/services/oracle'
 import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
 import { autoWithdrawalService } from 'src/services/auto-withdrawal'
 import { preSigningService } from 'src/services/pre-signing'
+import { vaultStorage } from 'src/services/vault-storage'
 
 export default defineComponent({
   name: 'VaultPage',
-
-  components: {
-    QrcodeVue,
-  },
 
   data() {
     return {
       form: {
         amount: null,
         priceTarget: null,
+        vaultName: '',
       },
       additionalDepositAmount: null,
       locking: false,
@@ -625,6 +427,45 @@ export default defineComponent({
       }
     },
 
+    loadSelectedVault(vaultData) {
+      try {
+        // Initialize contract for the selected vault
+        const contract = initializeHodlVaultContract(
+          vaultData.ownerPkhHex,
+          vaultData.oraclePkHex,
+          vaultData.priceTargetCents,
+          vaultData.vaultSalt, // Use stored salt
+        )
+
+        this.vault = {
+          id: vaultData.id, // Use vault ID
+          contractAddress: vaultData.contractAddress,
+          balance: vaultData.balance || 0,
+          priceTarget: vaultData.priceTarget,
+          priceTargetCents: vaultData.priceTargetCents,
+          ownerPkhHex: vaultData.ownerPkhHex,
+          oraclePkHex: vaultData.oraclePkHex,
+          contract,
+          originalFundingAddress: vaultData.originalFundingAddress,
+          vaultSalt: vaultData.vaultSalt, // Store salt for later use
+        }
+
+        // Update form with vault data
+        this.form.priceTarget = vaultData.priceTarget
+
+        this.refreshVaultBalance()
+        this.startBalancePolling()
+
+        console.log('Selected vault loaded:', vaultData.contractAddress)
+      } catch (error) {
+        console.error('Failed to load selected vault:', error)
+        this.$q.notify({
+          type: 'negative',
+          message: 'Failed to load vault data',
+        })
+      }
+    },
+
     getOwnerPkhHex() {
       const addr = this.walletAddress
       if (!addr) return ''
@@ -684,19 +525,43 @@ export default defineComponent({
           throw new Error('Oracle public key not loaded. Refresh the price first.')
         }
 
+        // Check for duplicate vault with same parameters
+        const existingVault = vaultStorage.checkForDuplicateVault(
+          this.walletAddress,
+          this.form.priceTarget,
+        )
+        if (existingVault) {
+          this.$q.notify({
+            type: 'warning',
+            message: `You already have a vault with target price $${this.form.priceTarget}. Each vault must have a unique target price.`,
+            timeout: 5000,
+          })
+          return
+        }
+
+        // Generate unique salt for this vault
+        const vaultSalt = vaultStorage.generateVaultSalt()
+
         const contractAddress = await calculateContractAddress(
           ownerPkhHex,
           ORACLE_PUBKEY, // Use Oracles.cash public key
           priceTargetCents,
+          vaultSalt, // Include salt for uniqueness
         )
 
-        const contract = initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTargetCents)
+        const contract = initializeHodlVaultContract(
+          ownerPkhHex,
+          oraclePkHex,
+          priceTargetCents,
+          vaultSalt,
+        )
 
         // Get initial balance (should be 0 for new contract)
         const balance = Number(await getAddressBalance(contractAddress))
 
-        // Store vault info
+        // Store vault info in new multi-vault system
         this.vault = {
+          id: vaultStorage.generateVaultId(), // Use unique ID
           contractAddress,
           balance: Number(balance),
           priceTarget: this.form.priceTarget,
@@ -705,10 +570,12 @@ export default defineComponent({
           oraclePkHex: ORACLE_PUBKEY, // Use hardcoded Oracles.cash public key
           contract, // Store contract instance for withdrawal
           originalFundingAddress: this.walletAddress, // Store original funding address
+          vaultSalt, // Store the salt for contract recreation
         }
 
-        // Persist vault so it survives refresh
-        this.persistVaultState({
+        // Save vault to multi-vault storage system
+        vaultStorage.saveVault({
+          id: this.vault.id,
           walletAddress: this.walletAddress,
           contractAddress,
           priceTarget: this.form.priceTarget,
@@ -716,7 +583,10 @@ export default defineComponent({
           ownerPkhHex,
           oraclePkHex: ORACLE_PUBKEY, // Save Oracles.cash public key
           originalFundingAddress: this.walletAddress, // Save original funding address
+          vaultSalt, // Save the salt
+          balance: Number(balance),
           createdAt: Date.now(),
+          name: this.form.vaultName || `Vault #${contractAddress.slice(-8)}`, // Use custom name or auto-generated
         })
 
         this.$q.notify({
@@ -727,6 +597,7 @@ export default defineComponent({
 
         console.log('Vault created. Contract address:', contractAddress)
         console.log('To lock funds, send', this.form.amount, 'satoshis to:', contractAddress)
+        console.log('Vault salt:', vaultSalt)
 
         // NEW: Pre-signing for auto-withdrawal
         if (this.enableAutoWithdrawal) {
@@ -735,6 +606,16 @@ export default defineComponent({
 
         // Always start watching balance after vault creation (covers both manual and WalletConnect deposits)
         this.startBalancePolling()
+
+        // Redirect to My Vaults after successful creation
+        this.$q.notify({
+          type: 'info',
+          message: 'Redirecting to My Vaults...',
+          timeout: 2000,
+        })
+        setTimeout(() => {
+          this.$router.push('/my-vaults')
+        }, 2000)
 
         // Immediately request a deposit from the connected wallet using WalletConnect
         if (typeof wc.request === 'function') {
@@ -824,154 +705,7 @@ export default defineComponent({
       return /^(bitcoincash|bchtest|chipnet):[a-zA-Z0-9]+$/i.test(trimmed)
     },
 
-    async onWithdraw() {
-      if (!this.canWithdraw || !this.vault) return
-
-      const wc = this.$walletConnect
-      if (!wc || !wc.isConnected()) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Please connect your wallet first',
-        })
-        return
-      }
-
-      // Use original funding address automatically
-      const ownerAddress = this.vault.originalFundingAddress || wc.getAddress()
-      if (!ownerAddress) {
-        this.$q.notify({ type: 'negative', message: 'Could not get wallet address' })
-        return
-      }
-
-      if (!this.oracleData.message_hex || !this.oracleData.signature_hex) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Oracle data missing. Refresh price first.',
-        })
-        return
-      }
-
-      this.withdrawing = true
-      try {
-        console.log('Simple withdrawal:', {
-          from: this.vault.contractAddress,
-          to: ownerAddress,
-          oracleMessage: this.oracleData.message_hex ? 'present' : 'missing',
-          oracleSig: this.oracleData.signature_hex ? 'present' : 'missing',
-        })
-
-        const result = await paytacaOptimizedWithdrawal(
-          this.vault.contract,
-          ownerAddress,
-          this.oracleData.message_hex,
-          this.oracleData.signature_hex,
-          wc.getOwnerPublicKeyHex() || '',
-          (method, params) => wc.request(method, params),
-        )
-
-        this.$q.notify({
-          type: 'positive',
-          message: result?.txid
-            ? `Withdrawal sent. TX: ${result.txid}`
-            : 'Withdrawal processed successfully!',
-          icon: 'check_circle',
-        })
-        await this.refreshVaultBalance()
-      } catch (err) {
-        console.error('Withdrawal failed:', err)
-        this.$q.notify({
-          type: 'negative',
-          message: `RAW ERROR: ${JSON.stringify(err, null, 2)}`,
-          timeout: 15000,
-          html: true,
-        })
-      } finally {
-        this.withdrawing = false
-      }
-    },
-
-    async onDepositMore() {
-      if (!this.vault || !this.vault.contractAddress) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'No active vault to deposit into',
-        })
-        return
-      }
-
-      const wc = this.$walletConnect
-      if (!wc || !wc.isConnected || !wc.isConnected()) {
-        this.$q.notify({
-          type: 'negative',
-          message: 'Please connect your wallet first',
-        })
-        return
-      }
-
-      if (!this.additionalDepositAmount || this.additionalDepositAmount < 1000) {
-        this.$q.notify({
-          type: 'warning',
-          message: 'Deposit amount must be at least 1000 satoshis',
-        })
-        return
-      }
-
-      this.depositing = true
-      try {
-        const depositPromise = depositToVault(
-          this.vault.contractAddress,
-          this.additionalDepositAmount,
-          (method, params) => wc.request(method, params),
-        )
-        const depositResult = await Promise.race([
-          depositPromise,
-          new Promise((resolve) => setTimeout(() => resolve({ txid: null, raw: null }), 20000)),
-        ])
-        const txid = depositResult && depositResult.txid
-        this.$q.notify({
-          type: 'positive',
-          message: txid
-            ? `Deposit transaction submitted. TX: ${txid}`
-            : 'Deposit submitted in wallet. Waiting for network confirmation...',
-          icon: 'check_circle',
-        })
-        this.startBalancePolling()
-      } catch (err) {
-        console.error('Additional deposit via WalletConnect failed:', err)
-        this.$q.notify({
-          type: 'negative',
-          message:
-            err?.message ||
-            'Deposit rejected by wallet. Please ensure you have enough funds for the amount + fee.',
-        })
-      } finally {
-        this.depositing = false
-      }
-    },
-
-    formatBalance(balance) {
-      return new Intl.NumberFormat('en-US').format(balance)
-    },
-
-    async refreshVaultBalance() {
-      if (!this.vault || !this.vault.contractAddress) return
-      this.balanceRefreshing = true
-      try {
-        const balance = await getAddressBalance(this.vault.contractAddress)
-        this.vault.balance = Number(balance)
-      } catch (err) {
-        console.error('Failed to refresh balance:', err)
-        this.$q.notify({
-          type: 'warning',
-          message: err?.message || 'Failed to refresh balance',
-        })
-      } finally {
-        this.balanceRefreshing = false
-      }
-    },
-
     startBalancePolling() {
-      if (!this.vault || !this.vault.contractAddress) return
       if (this.depositPollInterval) {
         clearInterval(this.depositPollInterval)
         this.depositPollInterval = null
@@ -1098,44 +832,29 @@ export default defineComponent({
   },
 
   mounted() {
-    this.refreshPrice()
+    // Check if we're coming from vault management with a selected vault
+    const selectedVault = localStorage.getItem('hodl-vault-selected-vault')
+    if (selectedVault) {
+      try {
+        const vault = JSON.parse(selectedVault)
+        this.loadSelectedVault(vault)
+        localStorage.removeItem('hodl-vault-selected-vault') // Clean up
+      } catch (error) {
+        console.error('Failed to load selected vault:', error)
+        // Fallback to legacy loading
+        this.loadPersistedVaultState()
+      }
+    } else {
+      // Load existing vault from legacy system
+      this.loadPersistedVaultState()
+    }
 
     // Initialize auto-withdrawal service with Vuex store
     autoWithdrawalService.init(this.$store)
 
-    // Restore persisted vault (if it belongs to current wallet)
-    const persisted = this.loadPersistedVaultState()
-    if (persisted && persisted.walletAddress && persisted.walletAddress === this.walletAddress) {
-      const currentOwnerPkhHex = this.getOwnerPkhHex()
-      const canRestore =
-        persisted.contractAddress &&
-        persisted.oraclePkHex &&
-        persisted.priceTargetCents != null &&
-        persisted.ownerPkhHex &&
-        currentOwnerPkhHex &&
-        persisted.ownerPkhHex === currentOwnerPkhHex
+    // Start price monitoring
+    this.refreshPrice()
 
-      if (canRestore) {
-        const contract = initializeHodlVaultContract(
-          persisted.ownerPkhHex,
-          persisted.oraclePkHex,
-          persisted.priceTargetCents,
-        )
-        this.vault = {
-          contractAddress: persisted.contractAddress,
-          balance: 0,
-          priceTarget: persisted.priceTarget ?? null,
-          priceTargetCents: persisted.priceTargetCents,
-          ownerPkhHex: persisted.ownerPkhHex,
-          oraclePkHex: ORACLE_PUBKEY, // Use hardcoded Oracles.cash public key
-          contract,
-        }
-        this.refreshVaultBalance()
-        this.startBalancePolling()
-      } else {
-        this.clearPersistedVaultState()
-      }
-    }
     this.balanceInterval = setInterval(() => {
       this.refreshVaultBalance()
     }, 30000)

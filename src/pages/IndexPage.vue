@@ -86,6 +86,7 @@
               style="border-color: #00d588; color: #00d588"
               padding="md xl"
               :disabled="!connectedAddress"
+              @click="$router.push('/my-vaults')"
             />
           </div>
         </div>

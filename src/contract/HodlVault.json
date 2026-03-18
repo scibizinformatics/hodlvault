@@ -12,6 +12,10 @@
     {
       "name": "priceTarget",
       "type": "int"
+    },
+    {
+      "name": "vaultSalt",
+      "type": "bytes"
     }
   ],
   "abi": [

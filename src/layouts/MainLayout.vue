@@ -2,7 +2,9 @@
   <q-layout view="lHh Lpr lFf">
     <q-header elevated class="bg-dark text-white">
       <q-toolbar>
-        <q-toolbar-title class="text-weight-bold"> HodlVault </q-toolbar-title>
+        <q-toolbar-title class="text-weight-bold cursor-pointer" @click="$router.push('/')">
+          HodlVault
+        </q-toolbar-title>
 
         <q-space />
 
@@ -47,7 +49,7 @@
     <q-footer class="bg-transparent text-grey-8">
       <div class="row justify-center q-pa-sm">
         <div class="text-caption" style="opacity: 0.4; font-size: 10px; line-height: 1.2">
-          System Version: v2.1.1 | Network: CHIPNET
+          System Version: v2.3.0 | Network: CHIPNET
         </div>
       </div>
     </q-footer>

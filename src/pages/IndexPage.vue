@@ -9,62 +9,8 @@
             emotional selling, just disciplined investing.
           </p>
 
-          <!-- Wallet Connection Section -->
-          <div class="wallet-section q-mb-xl">
-            <q-card
-              flat
-              bordered
-              class="wallet-card q-pa-lg"
-              style="background-color: #1e1e1e; border-color: #333"
-            >
-              <q-card-section class="q-pa-none">
-                <template v-if="!connectedAddress">
-                  <div class="text-subtitle1 text-grey-4 q-mb-md">
-                    Connect your wallet to get started
-                  </div>
-                  <div class="row justify-center q-gutter-md">
-                    <q-btn
-                      size="lg"
-                      color="primary"
-                      label="Connect Wallet"
-                      icon="account_balance_wallet"
-                      class="text-weight-bold"
-                      style="background-color: #00d588; color: #000"
-                      :loading="connecting"
-                      @click="onConnectWallet"
-                    />
-                    <q-btn
-                      color="warning"
-                      label="Mock"
-                      icon="bug_report"
-                      unelevated
-                      size="lg"
-                      @click="onMockConnect"
-                    />
-                  </div>
-                </template>
-                <template v-else>
-                  <div class="text-subtitle1 text-positive q-mb-md">
-                    <q-icon name="check_circle" class="q-mr-sm" />
-                    Wallet Connected
-                  </div>
-                  <div class="text-body2 text-grey-6 q-mb-sm">
-                    {{ connectedAddress }}
-                  </div>
-                  <q-btn
-                    color="negative"
-                    label="Disconnect"
-                    icon="logout"
-                    outline
-                    @click="onDisconnectWallet"
-                  />
-                </template>
-              </q-card-section>
-            </q-card>
-          </div>
-
           <!-- Action Buttons -->
-          <div class="row justify-center q-gutter-md">
+          <div class="row justify-center q-gutter-md q-mb-xl">
             <q-btn
               size="xl"
               color="primary"
@@ -109,7 +55,15 @@ export default defineComponent({
 
   computed: {
     connectedAddress() {
-      return this.$store.state.wallet?.address ?? null
+      return this.$store.getters['wallet/walletInfo']?.address ?? null
+    },
+
+    connectionStatus() {
+      return this.$store.getters['wallet/isConnected']
+    },
+
+    shortAddress() {
+      return this.$store.getters['wallet/walletInfo']?.shortAddress ?? null
     },
   },
 
@@ -120,43 +74,75 @@ export default defineComponent({
         if (!this.$walletConnect) {
           throw new Error('WalletConnect not initialized')
         }
-        await this.$walletConnect.connect()
-        this.$q.notify({
-          type: 'positive',
-          message: 'Connected to Paytaca',
-          icon: 'check_circle',
-        })
+
+        const address = await this.$walletConnect.connect()
+
+        if (address) {
+          this.$q.notify({
+            type: 'positive',
+            message: `Connected to Paytaca: ${this.shortAddress}`,
+            icon: 'check_circle',
+            timeout: 3000,
+          })
+        } else {
+          throw new Error('No address returned from wallet')
+        }
       } catch (err) {
+        console.error('Connection failed:', err)
         this.$q.notify({
           type: 'negative',
           message: err?.message || 'Failed to connect wallet',
+          timeout: 5000,
         })
       } finally {
         this.connecting = false
       }
     },
 
-    onDisconnectWallet() {
-      this.$store.dispatch('wallet/clearWallet')
-      if (this.$walletConnect) {
-        this.$walletConnect.disconnect()
+    async onDisconnectWallet() {
+      try {
+        this.$q.loading.show({
+          message: 'Disconnecting wallet...',
+        })
+
+        this.$store.dispatch('wallet/clearWallet')
+
+        if (this.$walletConnect) {
+          await this.$walletConnect.disconnect()
+        }
+
+        this.$q.notify({
+          type: 'info',
+          message: 'Wallet disconnected successfully',
+          icon: 'logout',
+          timeout: 3000,
+        })
+      } catch (err) {
+        console.error('Disconnect failed:', err)
+        this.$q.notify({
+          type: 'negative',
+          message: 'Failed to disconnect wallet properly',
+          timeout: 3000,
+        })
+      } finally {
+        this.$q.loading.hide()
       }
-      this.$q.notify({
-        type: 'info',
-        message: 'Wallet disconnected',
-      })
     },
 
     onMockConnect() {
       // Mock connection for testing
-      this.$store.dispatch('wallet/setWallet', {
+      const mockWalletData = {
         address: 'chipnet:qz4wqx8kjzlk7yalev0x8c8nppd6vqszxg5xqf8jrp',
         publicKey: '02d09613d20ce44da55956799863c0a5e82c5896a2df33502b4859664650529d2f',
-      })
+      }
+
+      this.$store.dispatch('wallet/setWallet', mockWalletData)
+
       this.$q.notify({
         type: 'positive',
-        message: 'Mock connection established',
-        icon: 'check_circle',
+        message: `Mock connection: ${mockWalletData.address.slice(0, 12)}...`,
+        icon: 'bug_report',
+        timeout: 3000,
       })
     },
   },

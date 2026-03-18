@@ -3,12 +3,18 @@
  * Real Paytaca connectivity via WalletConnect v2 Sign Client + Modal.
  * Using Paytaca-compatible chain IDs: bch:bchtest (testnet) and bch:bitcoincash (mainnet).
  * Reference: https://github.com/mainnet-pat/wc2-bch-bcr
+ *
+ * Enhanced with unified state management to prevent race conditions
+ * and synchronization issues between Paytaca and system state.
  */
 
 import { boot } from 'quasar/wrappers'
 import SignClient from '@walletconnect/sign-client'
 import { WalletConnectModal } from '@walletconnect/modal'
 import { base64ToBin, binToHex, hexToBin, secp256k1, sha256 } from '@bitauth/libauth'
+import { connectionStateManager } from 'src/services/ConnectionStateManager'
+import { SessionHealthMonitor } from 'src/services/SessionHealthMonitor'
+import { StateReconciliationService } from 'src/services/StateReconciliationService'
 
 // Paytaca/WalletConnect v2 BCH chain IDs (wc2-bch-bcr spec)
 // bch:bchtest = testnet3, bch:chipnet = chipnet, bch:bitcoincash = mainnet, bch:bchreg = regtest
@@ -50,9 +56,13 @@ if (PROJECT_ID === 'YOUR_REOWN_PROJECT_ID') {
 
 let signClient = null
 let modal = null
+let sessionHealthMonitor = null
+let stateReconciliationService = null
+let globalStore = null // Global store reference for event listeners
+let sessionMonitoringInterval = null // Global monitoring interval
+
+// Legacy variable for backward compatibility
 let currentSession = null
-let isConnecting = false // Prevent multiple simultaneous connections
-let connectionPromise = null // Track ongoing connection attempts
 
 const BITCOIN_SIGNED_MESSAGE_PREFIX = (() => {
   const encoder = new TextEncoder()
@@ -195,18 +205,53 @@ async function getSignClient() {
 
   // Add session event listeners for better state management
   signClient.on('session_event', ({ event, chainId }) => {
-    console.log('WalletConnect session event:', { event, chainId })
+    console.log('WalletConnect: Session event', { event, chainId })
+
     // Handle session events like addressesChanged
-    if (event.name === 'addressesChanged' && currentSession) {
+    if (event.name === 'addressesChanged' && connectionStateManager.getSession()) {
       // Refresh wallet state when addresses change
-      syncSessionToStore(signClient, currentSession)
+      syncSessionToStore(signClient, connectionStateManager.getSession())
+        .then(() => {
+          // Trigger reconciliation after address change
+          if (stateReconciliationService) {
+            stateReconciliationService.performReconciliation().catch((err) => {
+              console.warn('WalletConnect: Reconciliation after address change failed', err)
+            })
+          }
+        })
+        .catch((err) => {
+          console.warn('WalletConnect: Failed to sync session after address change', err)
+        })
     }
   })
 
-  signClient.on('session_delete', () => {
-    console.log('WalletConnect session deleted')
+  signClient.on('session_delete', ({ topic }) => {
+    console.log('WalletConnect: Session deleted by wallet', { topic })
+
+    // IMMEDIATELY clear all connection state
+    connectionStateManager.setSession(null)
     currentSession = null
-    // Note: store clearing will be handled by the boot function
+
+    // Stop health monitoring
+    if (sessionHealthMonitor) {
+      sessionHealthMonitor.stopMonitoring()
+    }
+
+    // CRITICAL: Clear Vuex store immediately for reactive UI update
+    if (globalStore) {
+      globalStore.commit('wallet/CLEAR_WALLET')
+      console.log('WalletConnect: Vuex store cleared due to session deletion')
+    }
+
+    // Show user notification
+    if (typeof window !== 'undefined' && window.$q) {
+      window.$q.notify({
+        type: 'info',
+        message: 'Wallet disconnected from Paytaca',
+        icon: 'logout',
+        timeout: 3000,
+      })
+    }
   })
 
   return signClient
@@ -261,21 +306,30 @@ async function cleanupStaleSessions(client) {
 export function initializeWalletConnect(store) {
   return {
     async connect() {
-      // Prevent multiple simultaneous connections
-      if (isConnecting) {
-        console.log('Connection already in progress, returning existing promise')
-        return connectionPromise
+      console.log('WalletConnect: Connection requested')
+
+      // Use the unified state manager
+      if (connectionStateManager.isConnecting()) {
+        console.log('WalletConnect: Connection already in progress, returning existing promise')
+        return connectionStateManager.getConnectionPromise()
       }
 
-      isConnecting = true
-      connectionPromise = this._performConnection(store)
+      if (connectionStateManager.isConnected()) {
+        console.log('WalletConnect: Already connected, returning address')
+        return store.state.wallet?.address ?? null
+      }
+
+      // Set connecting state
+      connectionStateManager.setState(connectionStateManager.states.CONNECTING)
+
+      const connectionPromise = this._performConnection(store)
+      connectionStateManager.setConnectionPromise(connectionPromise)
 
       try {
         const result = await connectionPromise
         return result
       } finally {
-        isConnecting = false
-        connectionPromise = null
+        connectionStateManager.clearConnectionPromise()
       }
     },
 
@@ -288,14 +342,17 @@ export function initializeWalletConnect(store) {
         // Clean up stale sessions first
         await cleanupStaleSessions(client)
 
+        // Check for existing valid sessions
         const existingSessions = client.session.getAll()
         const bchSession = existingSessions.find((s) => s.namespaces?.bch?.accounts?.length)
+
         if (bchSession) {
           const methods = bchSession.namespaces?.bch?.methods ?? []
           const hasRequiredMethods = REQUIRED_METHODS.every((m) => methods.includes(m))
 
           if (hasRequiredMethods && bchSession.expiry * 1000 > Date.now()) {
-            currentSession = bchSession
+            console.log('WalletConnect: Found existing valid session')
+            connectionStateManager.setSession(bchSession)
             await syncSessionToStore(store, client, bchSession)
             return store.state.wallet?.address ?? null
           } else {
@@ -323,11 +380,19 @@ export function initializeWalletConnect(store) {
             await new Promise((resolve) => setTimeout(resolve, 100))
             await wcModal.openModal({ uri })
 
-            // Add timeout for QR code display
+            // Add timeout for QR code display with better error handling
             const qrTimeout = setTimeout(() => {
-              console.warn('QR code display timeout, attempting to reopen modal')
+              console.warn('WalletConnect: QR code display timeout, attempting to reopen modal')
               wcModal.closeModal()
-              setTimeout(() => wcModal.openModal({ uri }), 500)
+              setTimeout(() => {
+                wcModal.openModal({ uri }).catch((err) => {
+                  console.error('WalletConnect: Failed to reopen modal', err)
+                  connectionStateManager.setState(connectionStateManager.states.ERROR, {
+                    reason: 'modal_failed',
+                    message: 'Failed to display QR code',
+                  })
+                })
+              }, 500)
             }, 5000)
 
             // Clear timeout when modal is closed
@@ -337,7 +402,11 @@ export function initializeWalletConnect(store) {
               return originalCloseModal.apply(this, args)
             }
           } catch (modalError) {
-            console.error('Failed to open WalletConnect modal:', modalError)
+            console.error('WalletConnect: Failed to open WalletConnect modal:', modalError)
+            connectionStateManager.setState(connectionStateManager.states.ERROR, {
+              reason: 'modal_failed',
+              message: 'Failed to display QR code. Please try again.',
+            })
             throw new Error('Failed to display QR code. Please try again.')
           }
         }
@@ -349,8 +418,17 @@ export function initializeWalletConnect(store) {
           wcModal.closeModal()
         }
 
-        currentSession = session
+        // Update state manager with new session
+        connectionStateManager.setSession(session)
+        currentSession = session // Keep for backward compatibility
+
         await syncSessionToStore(store, client, session)
+
+        // Start health monitoring for new session
+        if (sessionHealthMonitor) {
+          sessionHealthMonitor.startMonitoring()
+        }
+
         return store.state.wallet?.address ?? null
       } catch (err) {
         // Enhanced error handling and cleanup
@@ -359,9 +437,15 @@ export function initializeWalletConnect(store) {
           try {
             m.closeModal()
           } catch (closeError) {
-            console.warn('Failed to close modal:', closeError)
+            console.warn('WalletConnect: Failed to close modal:', closeError)
           }
         }
+
+        // Update state manager with error
+        connectionStateManager.setState(connectionStateManager.states.ERROR, {
+          reason: 'connection_failed',
+          message: err?.message || 'Connection failed',
+        })
 
         try {
           await this.disconnect()
@@ -370,7 +454,7 @@ export function initializeWalletConnect(store) {
         }
 
         // Enhanced error logging
-        console.error('WalletConnect connection error:', {
+        console.error('WalletConnect: Connection error:', {
           message: err?.message,
           code: err?.code,
           data: err?.data,
@@ -382,30 +466,57 @@ export function initializeWalletConnect(store) {
     },
 
     async disconnect() {
+      console.log('WalletConnect: Disconnect requested from system')
+
       try {
-        if (signClient && currentSession?.topic) {
-          await signClient.disconnect({ topic: currentSession.topic })
+        // Stop health monitoring
+        if (sessionHealthMonitor) {
+          sessionHealthMonitor.stopMonitoring()
+        }
+
+        // Stop aggressive session monitoring
+        stopAggressiveSessionMonitoring()
+
+        // Disconnect WalletConnect session (this will notify Paytaca)
+        const session = connectionStateManager.getSession()
+        if (signClient && session?.topic) {
+          console.log('WalletConnect: Disconnecting session', session.topic)
+          await signClient.disconnect({ topic: session.topic })
+          console.log('WalletConnect: Session disconnected, Paytaca should be notified')
         }
       } catch (e) {
-        console.debug('WalletConnect disconnect ignored:', e)
+        console.debug('WalletConnect: Disconnect ignored:', e)
       }
 
-      // Clear ALL state
+      // Clear ALL state using state manager
+      connectionStateManager.reset()
       currentSession = null
-      isConnecting = false
-      connectionPromise = null
 
-      if (store) {
-        store.commit('wallet/CLEAR_WALLET')
+      if (globalStore) {
+        globalStore.commit('wallet/CLEAR_WALLET')
+        console.log('WalletConnect: Vuex store cleared due to system disconnect')
       }
+
+      // Show user notification
+      if (typeof window !== 'undefined' && window.$q) {
+        window.$q.notify({
+          type: 'info',
+          message: 'Disconnected from Paytaca wallet',
+          icon: 'logout',
+          timeout: 3000,
+        })
+      }
+
+      console.log('WalletConnect: Disconnect completed - Paytaca should show disconnected')
     },
 
     isConnected() {
-      return !!store?.state?.wallet?.address && !!currentSession?.topic
+      // Use unified state manager
+      return connectionStateManager.isConnected() && !!globalStore?.state?.wallet?.address
     },
 
     getAddress() {
-      return store?.state?.wallet?.address ?? null
+      return globalStore?.state?.wallet?.address ?? null
     },
 
     getSignatureTemplate() {
@@ -413,28 +524,43 @@ export function initializeWalletConnect(store) {
     },
 
     getOwnerPublicKeyHex() {
-      return store?.state?.wallet?.publicKey ?? null
+      return globalStore?.state?.wallet?.publicKey ?? null
     },
 
     getSessionTopic() {
-      return currentSession?.topic ?? null
+      return connectionStateManager.getSession()?.topic ?? null
     },
 
     getChainId() {
-      return currentSession?.namespaces?.bch?.chains?.[0] ?? null
+      return connectionStateManager.getSession()?.namespaces?.bch?.chains?.[0] ?? null
     },
 
     async request(method, params) {
       const client = await getSignClient()
-      if (!currentSession?.topic) {
+      const session = connectionStateManager.getSession()
+
+      if (!session?.topic) {
         throw new Error('Wallet not connected. Connect Paytaca first.')
       }
-      const chainId = currentSession.namespaces?.bch?.chains?.[0] ?? BCH_CHIPNET_CHAIN
-      return await client.request({
-        chainId,
-        topic: currentSession.topic,
-        request: { method, params },
-      })
+
+      const chainId = session.namespaces?.bch?.chains?.[0] ?? BCH_CHIPNET_CHAIN
+
+      try {
+        return await client.request({
+          chainId,
+          topic: session.topic,
+          request: { method, params },
+        })
+      } catch (error) {
+        // If request fails, trigger reconciliation
+        if (stateReconciliationService) {
+          console.log('WalletConnect: Request failed, triggering reconciliation')
+          stateReconciliationService.performReconciliation().catch((err) => {
+            console.warn('WalletConnect: Reconciliation failed after request error', err)
+          })
+        }
+        throw error
+      }
     },
 
     async recoverPublicKey() {
@@ -548,6 +674,7 @@ function getNetworkFromChainId(chainId) {
 
 async function restoreSessionIfAny(store) {
   if (!store) return
+
   try {
     const client = await getSignClient()
     const sessions = client.session.getAll()
@@ -559,8 +686,15 @@ async function restoreSessionIfAny(store) {
       const hasRequiredMethods = REQUIRED_METHODS.every((m) => methods.includes(m))
 
       if (hasRequiredMethods) {
-        currentSession = bchSession
+        console.log('WalletConnect: Restoring existing session')
+        connectionStateManager.setSession(bchSession)
+        currentSession = bchSession // Keep for backward compatibility
         await syncSessionToStore(client, bchSession)
+
+        // Start health monitoring for restored session
+        if (sessionHealthMonitor) {
+          sessionHealthMonitor.startMonitoring()
+        }
       } else {
         // Clean up invalid session
         await client.disconnect({ topic: bchSession.topic })
@@ -569,8 +703,19 @@ async function restoreSessionIfAny(store) {
       // Clean up expired session
       await client.disconnect({ topic: bchSession.topic })
     }
+
+    // Perform initial reconciliation if we have any state
+    if (bchSession || store.state.wallet?.address) {
+      setTimeout(() => {
+        if (stateReconciliationService) {
+          stateReconciliationService.performReconciliation().catch((err) => {
+            console.warn('WalletConnect: Initial reconciliation failed', err)
+          })
+        }
+      }, 2000)
+    }
   } catch (e) {
-    console.debug('WalletConnect session restore failed:', e)
+    console.debug('WalletConnect: Session restore failed:', e)
   }
 }
 
@@ -580,8 +725,178 @@ export default boot(({ app }) => {
     console.warn('WalletConnect boot: Vuex store not available yet')
     return
   }
+
+  // Set global store reference for event listeners
+  globalStore = store
+
   const wc = initializeWalletConnect(store)
   app.config.globalProperties.$walletConnect = wc
   app.provide('walletConnect', wc)
+
+  // Initialize enhanced services after boot
+  initializeEnhancedServices(store)
+
+  // Start aggressive session monitoring for instant disconnection detection
+  startAggressiveSessionMonitoring()
+
+  // Restore existing sessions
   restoreSessionIfAny(store)
 })
+
+/**
+ * Initialize enhanced connection management services
+ */
+function initializeEnhancedServices(store) {
+  // Initialize health monitor
+  sessionHealthMonitor = new SessionHealthMonitor(connectionStateManager, signClient)
+
+  // Initialize reconciliation service
+  stateReconciliationService = new StateReconciliationService(
+    connectionStateManager,
+    store,
+    signClient,
+  )
+
+  // Set up state change listeners
+  connectionStateManager.addStateChangeListener((newState, oldState, data) => {
+    console.log('WalletConnect: State changed', { from: oldState, to: newState, data })
+
+    // Trigger reconciliation on error states
+    if (newState === connectionStateManager.states.ERROR && stateReconciliationService) {
+      setTimeout(() => {
+        stateReconciliationService.performReconciliation().catch((err) => {
+          console.warn('WalletConnect: Auto-reconciliation failed', err)
+        })
+      }, 1000)
+    }
+  })
+
+  // Set up reconciliation listeners
+  stateReconciliationService.addReconciliationListener((event, data) => {
+    console.log('WalletConnect: Reconciliation event', event, data)
+
+    if (event === 'reconciliation_completed' && !data.success) {
+      // Show user notification for failed reconciliation
+      if (typeof window !== 'undefined' && window.$q) {
+        window.$q.notify({
+          type: 'warning',
+          message: 'Connection issues detected. Please try reconnecting.',
+          timeout: 5000,
+        })
+      }
+    }
+  })
+
+  console.log('WalletConnect: Enhanced services initialized')
+}
+
+/**
+ * Aggressive session monitoring for instant disconnection detection
+ */
+function startAggressiveSessionMonitoring() {
+  const checkSession = async () => {
+    try {
+      if (!signClient) return
+
+      const sessions = signClient.session.getAll()
+      const bchSession = sessions.find((s) => s.namespaces?.bch?.accounts?.length)
+
+      // If we think we're connected but no session exists, force disconnect
+      if (connectionStateManager.isConnected() && !bchSession) {
+        console.log('WalletConnect: Session lost, forcing disconnect')
+
+        // Clear all state immediately
+        connectionStateManager.reset()
+        currentSession = null
+
+        if (globalStore) {
+          globalStore.commit('wallet/CLEAR_WALLET')
+        }
+
+        // Show notification
+        if (typeof window !== 'undefined' && window.$q) {
+          window.$q.notify({
+            type: 'warning',
+            message: 'Wallet connection lost - Paytaca disconnected',
+            icon: 'warning',
+            timeout: 3000,
+          })
+        }
+
+        return
+      }
+
+      // If session exists but is expired, force disconnect
+      if (bchSession && bchSession.expiry * 1000 < Date.now()) {
+        console.log('WalletConnect: Session expired, forcing disconnect')
+
+        connectionStateManager.reset()
+        currentSession = null
+
+        if (globalStore) {
+          globalStore.commit('wallet/CLEAR_WALLET')
+        }
+
+        return
+      }
+
+      // Test if session is responsive by making a lightweight request
+      if (bchSession && connectionStateManager.isConnected()) {
+        try {
+          await signClient.request({
+            topic: bchSession.topic,
+            chainId: bchSession.namespaces?.bch?.chains?.[0] || 'bch:chipnet',
+            request: { method: 'bch_getAddresses', params: {} },
+          })
+        } catch (error) {
+          if (error.code === -32001 || error.message?.includes('session')) {
+            console.log('WalletConnect: Session unresponsive, forcing disconnect')
+
+            connectionStateManager.reset()
+            currentSession = null
+
+            if (globalStore) {
+              globalStore.commit('wallet/CLEAR_WALLET')
+            }
+
+            if (typeof window !== 'undefined' && window.$q) {
+              window.$q.notify({
+                type: 'warning',
+                message: 'Wallet connection lost - Paytaca unresponsive',
+                icon: 'warning',
+                timeout: 3000,
+              })
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('WalletConnect: Session monitoring error', error)
+    }
+  }
+
+  // Check every 2 seconds for instant responsiveness
+  sessionMonitoringInterval = setInterval(checkSession, 2000)
+
+  // Also check on visibility change (when user switches back to tab)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        checkSession()
+      }
+    })
+  }
+
+  console.log('WalletConnect: Aggressive session monitoring started')
+}
+
+/**
+ * Stop aggressive session monitoring
+ */
+function stopAggressiveSessionMonitoring() {
+  if (sessionMonitoringInterval) {
+    clearInterval(sessionMonitoringInterval)
+    sessionMonitoringInterval = null
+    console.log('WalletConnect: Aggressive session monitoring stopped')
+  }
+}

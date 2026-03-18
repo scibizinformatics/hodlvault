@@ -70,13 +70,15 @@ export default defineComponent({
 
   computed: {
     connectedAddress() {
-      return this.$store.state.wallet?.address ?? null
+      return this.$store.getters['wallet/walletInfo']?.address ?? null
+    },
+
+    connectionStatus() {
+      return this.$store.getters['wallet/isConnected']
     },
 
     shortAddress() {
-      if (!this.connectedAddress) return ''
-      const addr = this.connectedAddress
-      return `${addr.slice(0, 8)}...${addr.slice(-8)}`
+      return this.$store.getters['wallet/walletInfo']?.shortAddress ?? null
     },
   },
 
@@ -87,43 +89,69 @@ export default defineComponent({
         if (!this.$walletConnect) {
           throw new Error('WalletConnect not initialized')
         }
-        await this.$walletConnect.connect()
-        this.$q.notify({
-          type: 'positive',
-          message: 'Connected to Paytaca',
-          icon: 'check_circle',
-        })
+
+        const address = await this.$walletConnect.connect()
+
+        if (address) {
+          this.$q.notify({
+            type: 'positive',
+            message: `Connected to Paytaca`,
+            icon: 'check_circle',
+            timeout: 2000,
+          })
+        } else {
+          throw new Error('No address returned from wallet')
+        }
       } catch (err) {
+        console.error('Connection failed:', err)
         this.$q.notify({
           type: 'negative',
-          message: err && err.message ? err.message : 'Failed to connect wallet',
+          message: err?.message || 'Failed to connect wallet',
+          timeout: 3000,
         })
       } finally {
         this.connecting = false
       }
     },
 
-    onDisconnectWallet() {
-      this.$store.dispatch('wallet/clearWallet')
-      if (this.$walletConnect) {
-        this.$walletConnect.disconnect()
+    async onDisconnectWallet() {
+      try {
+        this.$store.dispatch('wallet/clearWallet')
+
+        if (this.$walletConnect) {
+          await this.$walletConnect.disconnect()
+        }
+
+        this.$q.notify({
+          type: 'info',
+          message: 'Wallet disconnected',
+          icon: 'logout',
+          timeout: 2000,
+        })
+      } catch (err) {
+        console.error('Disconnect failed:', err)
+        this.$q.notify({
+          type: 'negative',
+          message: 'Failed to disconnect wallet',
+          timeout: 2000,
+        })
       }
-      this.$q.notify({
-        type: 'info',
-        message: 'Wallet disconnected',
-      })
     },
 
     onMockConnect() {
       // Mock connection for testing
-      this.$store.dispatch('wallet/setWallet', {
+      const mockWalletData = {
         address: 'chipnet:qz4wqx8kjzlk7yalev0x8c8nppd6vqszxg5xqf8jrp',
         publicKey: '02d09613d20ce44da55956799863c0a5e82c5896a2df33502b4859664650529d2f',
-      })
+      }
+
+      this.$store.dispatch('wallet/setWallet', mockWalletData)
+
       this.$q.notify({
         type: 'positive',
         message: 'Mock connection established',
-        icon: 'check_circle',
+        icon: 'bug_report',
+        timeout: 2000,
       })
     },
   },

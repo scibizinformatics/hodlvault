@@ -80,7 +80,7 @@
                       <div class="col-auto">
                         <div class="text-grey-5">Balance</div>
                         <div class="text-white text-weight-medium">
-                          {{ formatBalance(vault.balance) }} BCH
+                          {{ formatBalance(vault.balance) }} satoshis
                         </div>
                       </div>
 
@@ -158,7 +158,7 @@
                 <div class="col-12 col-sm-4">
                   <div class="text-grey-5">Total Locked</div>
                   <div class="text-h4 text-primary text-weight-bold">
-                    {{ getTotalBalance().toFixed(4) }} BCH
+                    {{ getTotalSatoshis() }} satoshis
                   </div>
                 </div>
                 <div class="col-12 col-sm-4">
@@ -195,6 +195,7 @@ export default defineComponent({
       vaults: [],
       currentBchPrice: null,
       priceLoading: false,
+      balanceInterval: null,
     }
   },
 
@@ -207,6 +208,11 @@ export default defineComponent({
   mounted() {
     this.loadVaults()
     this.fetchCurrentPrice()
+    this.startBalancePolling()
+  },
+
+  beforeUnmount() {
+    this.stopBalancePolling()
   },
 
   methods: {
@@ -298,8 +304,8 @@ export default defineComponent({
     },
 
     formatBalance(satoshis) {
-      if (!satoshis) return '0.0000'
-      return (satoshis / 100000000).toFixed(4)
+      if (!satoshis) return '0'
+      return satoshis.toString()
     },
 
     formatDate(timestamp) {
@@ -311,6 +317,12 @@ export default defineComponent({
       if (!this.currentBchPrice || !vault.priceTarget) return 0
       const progress = (this.currentBchPrice / vault.priceTarget) * 100
       return Math.min(progress, 100)
+    },
+
+    getTotalSatoshis() {
+      return this.vaults.reduce((total, vault) => {
+        return total + (vault.balance || 0)
+      }, 0)
     },
 
     getTotalBalance() {
@@ -329,6 +341,56 @@ export default defineComponent({
 
       // Navigate to vault management page
       this.$router.push('/vault/manage')
+    },
+
+    startBalancePolling() {
+      this.stopBalancePolling()
+      this.balanceInterval = setInterval(() => {
+        this.refreshVaultBalances()
+      }, 30000) // Poll every 30 seconds
+    },
+
+    stopBalancePolling() {
+      if (this.balanceInterval) {
+        clearInterval(this.balanceInterval)
+        this.balanceInterval = null
+      }
+    },
+
+    async refreshVaultBalances() {
+      if (this.vaults.length === 0) return
+
+      try {
+        // Refresh balances for all vaults
+        const updatedVaults = await Promise.all(
+          this.vaults.map(async (vault) => {
+            try {
+              const { getAddressBalance } = await import('src/services/blockchain')
+              const currentBalance = await getAddressBalance(vault.contractAddress)
+
+              // Update vault balance in storage
+              vaultStorage.updateVaultBalance(vault.contractAddress, currentBalance)
+
+              return {
+                ...vault,
+                balance: Number(currentBalance),
+                canWithdraw: this.checkCanWithdraw({ ...vault, balance: Number(currentBalance) }),
+              }
+            } catch (balanceError) {
+              console.warn(
+                `Failed to refresh balance for vault ${vault.contractAddress}:`,
+                balanceError,
+              )
+              return vault
+            }
+          }),
+        )
+
+        this.vaults = updatedVaults
+        console.log('Vault balances refreshed automatically')
+      } catch (error) {
+        console.error('Failed to refresh vault balances:', error)
+      }
     },
   },
 })

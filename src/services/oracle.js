@@ -1,20 +1,20 @@
 /**
  * Service to interact with Oracles.cash Production Oracle
+ * Using the official General Protocols Oracle API
  */
 
-export const ORACLE_PUBKEY = '02d09613d20ce44da55956799863c0a5e82c5896a2df33502b4859664650529d2f'
+export const ORACLE_PUBKEY = '02d09db08af1ff4e8453919cc866a4be427d7bfe18f2c05e5444c196fcf6fd2818' // USD/BCH Oracle
 
 export async function fetchOraclePrice() {
-  // CoinGecko API for BCH price (reliable alternative)
-  const COINGECKO_URL =
-    'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash&vs_currencies=usd'
+  const ORACLE_API_URL = 'https://oracles.generalprotocols.com/api/v1/oracles'
 
   try {
-    // Add timeout and better headers
+    // First, get the latest oracle data to find the USD/BCH oracle
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout for external API
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-    const response = await fetch(COINGECKO_URL, {
+    // Get oracle list to find USD/BCH oracle
+    const oraclesResponse = await fetch(ORACLE_API_URL, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -23,67 +23,72 @@ export async function fetchOraclePrice() {
       signal: controller.signal,
     })
 
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      throw new Error(`Price API returned status: ${response.status}`)
+    if (!oraclesResponse.ok) {
+      throw new Error(`Oracle API returned status: ${oraclesResponse.status}`)
     }
 
-    const responseText = await response.text()
+    const oraclesData = await oraclesResponse.json()
 
-    // Check if response is empty
-    if (!responseText || responseText.trim() === '') {
-      throw new Error('Empty response from price API')
+    // Find the USD/BCH oracle
+    const usdBchOracle = oraclesData.oracles.find((oracle) => oracle.publicKey === ORACLE_PUBKEY)
+
+    if (!usdBchOracle || !usdBchOracle.messageMetrics) {
+      throw new Error('USD/BCH oracle not found or has no message metrics')
     }
 
-    // Try to parse JSON
-    let data
-    try {
-      data = JSON.parse(responseText)
-    } catch (parseError) {
-      console.error('Failed to parse price response:', parseError)
-      console.error('Response text:', responseText)
-      throw new Error('Invalid JSON response from price API')
+    // Get the current price from the oracle metrics
+    const currentPriceInCents = usdBchOracle.messageMetrics.currentPrice
+    const currentTimestamp = usdBchOracle.messageMetrics.maxMessageTimestamp
+
+    if (!currentPriceInCents) {
+      throw new Error('No current price available from oracle metrics')
     }
 
-    // Validate required fields from CoinGecko API
-    if (!data['bitcoin-cash'] || !data['bitcoin-cash'].usd) {
-      console.error('Invalid price data structure:', data)
-      throw new Error('Price response missing required fields')
+    // Convert cents to USD
+    const priceInUSD = currentPriceInCents / 100
+
+    // Validate the price seems reasonable
+    if (priceInUSD < 50 || priceInUSD > 10000) {
+      console.warn(`Oracle price seems unusual: $${priceInUSD}, using fallback`)
+      throw new Error('Oracle price out of reasonable range')
     }
 
-    const priceInCents = Math.round(data['bitcoin-cash'].usd * 100)
-    const currentHeight = Date.now() // Use timestamp as mock block height
-
-    // Create oracle-like message with proper Little-Endian encoding for Bitcoin Script
-    // Bitcoin Script expects Little-Endian integers for int() operations
-    const heightHex = currentHeight.toString(16).padStart(8, '0').slice(-8)
-    const priceHex = priceInCents.toString(16).padStart(8, '0')
+    // Create a properly formatted oracle message
+    // Format: [timestamp][price_in_cents][asset_code]
+    const timestampHex = currentTimestamp.toString(16).padStart(8, '0').slice(-8)
+    const priceHex = currentPriceInCents.toString(16).padStart(8, '0')
 
     // Convert to Little-Endian format (reverse hex string)
-    const heightHexLE = heightHex.match(/.{2}/g).reverse().join('')
+    const timestampHexLE = timestampHex.match(/.{2}/g).reverse().join('')
     const priceHexLE = priceHex.match(/.{2}/g).reverse().join('')
 
-    const messageHex = heightHexLE + priceHexLE
+    // Add asset code for USD (empty for now, as we're focusing on the price)
+    const messageHex = timestampHexLE + priceHexLE
 
-    // Map to the format the UI expects
+    clearTimeout(timeoutId)
+
+    // Note: We don't have the actual signature from the API, so we'll use a placeholder
+    // In a production environment, you might need to use Server-Sent Events or other methods
+    // to get the actual signed message
     return {
-      price: data['bitcoin-cash'].usd,
+      price: priceInUSD,
       message_hex: messageHex,
       signature_hex:
-        '3044022044f7d0438553f6fb52be62a94e6d676c6d47536f6a101f51f76257931db14030022009073ba73e721684db25397e73d6c210', // Mock signature
+        '3044022044f7d0438553f6fb52be62a94e6d676c6d47536f6a101f51f76257931db14030022009073ba73e721684db25397e73d6c210', // Placeholder signature
       oracle_pubkey_hex: ORACLE_PUBKEY,
       status: 'success',
-      source: 'coingecko',
+      source: 'oracles.cash',
+      timestamp: currentTimestamp,
+      note: 'Price from oracle metrics, signature placeholder',
     }
   } catch (error) {
-    console.error('Connection to price API failed:', error)
+    console.error('Failed to fetch oracle price:', error)
 
     // Provide fallback data when oracle is unavailable
     if (error.name === 'AbortError') {
-      console.warn('Price request timed out, using fallback')
+      console.warn('Oracle request timed out, using fallback')
     } else if (error.message.includes('Failed to fetch')) {
-      console.warn('Price server not reachable, using fallback')
+      console.warn('Oracle server not reachable, using fallback')
     }
 
     // Return fallback data to prevent system from breaking
@@ -95,6 +100,7 @@ export async function fetchOraclePrice() {
       oracle_pubkey_hex: ORACLE_PUBKEY,
       status: 'fallback',
       source: 'fallback',
+      timestamp: Date.now(),
     }
   }
 }

@@ -377,12 +377,13 @@ export default defineComponent({
         }
 
         const vaultData = JSON.parse(selectedVaultData)
-
+        console.log('vaultData', vaultData)
         // Initialize contract for the selected vault
         const contract = initializeHodlVaultContract(
           vaultData.ownerPkhHex,
           vaultData.oraclePkHex,
           vaultData.priceTargetCents,
+          vaultData.vaultSalt,
         )
 
         this.vault = {
@@ -552,16 +553,18 @@ export default defineComponent({
         })
         return
       }
-
+      console.log(this.vault)
       this.withdrawing = true
       try {
+        const ownerPkHex = await this.$walletConnect.recoverPublicKey()
+        console.log('Recovered public key from WalletConnect:', ownerPkHex)
+
         await paytacaOptimizedWithdrawal(
           this.vault.contract,
-          this.vault.contractAddress,
+          ownerAddress,
           this.oracleData.message_hex,
           this.oracleData.signature_hex,
-          this.vault.balance,
-          ownerAddress,
+          ownerPkHex,
           (method, params) => wc.request(method, params),
         )
 

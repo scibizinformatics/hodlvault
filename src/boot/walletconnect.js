@@ -147,14 +147,17 @@ function tryExtractCompactSignature(buffer) {
 }
 
 export async function recoverPublicKey(store) {
+  console.log('recoverpublickey:')
   if (!store) throw new Error('Vuex store not available')
 
   const client = await getSignClient(store)
+  console.log('CLIENT PRINT:', client)
   if (!currentSession?.topic) {
     throw new Error('Wallet not connected. Connect Paytaca first.')
   }
 
   const chainId = currentSession.namespaces?.bch?.chains?.[0] ?? BCH_CHIPNET_CHAIN
+  console.log('CHAIN ID:', chainId)
   const message = 'Login to HodlVault'
 
   const signatureResponse = await client.request({
@@ -545,6 +548,7 @@ async function syncSessionToStore(store, client, session) {
           topic: session.topic,
           request: { method: 'bch_getPublicKey', params: {} },
         })
+        console.log('DEBUG: Public key result:', pubKeyResult)
         if (pubKeyResult && typeof pubKeyResult === 'string') {
           publicKey = pubKeyResult
           console.log('DEBUG: Retrieved public key from wallet')

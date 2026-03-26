@@ -115,6 +115,7 @@ export function initializeHodlVaultContract(
   priceTarget,
   vaultSalt = null,
 ) {
+  console.log('vaultSalt', vaultSalt)
   const provider = getProvider()
 
   // Convert hex strings to bytes for constructor
@@ -126,8 +127,8 @@ export function initializeHodlVaultContract(
 
   // Generate unique salt if not provided (for new vaults)
   const salt = vaultSalt ? hexToBin(vaultSalt) : crypto.getRandomValues(new Uint8Array(32))
-
-  const constructorArgs = [ownerPkh, oraclePk, priceTargetBigInt, salt]
+  console.log('salt', salt)
+  const constructorArgs = [ownerPkh, oraclePk, priceTargetBigInt]
 
   const contract = new Contract(HodlVaultArtifact, constructorArgs, {
     provider,
@@ -153,6 +154,7 @@ export async function calculateContractAddress(
   vaultSalt = null,
 ) {
   try {
+    console.log('vaultSalt', vaultSalt)
     const contract = initializeHodlVaultContract(ownerPkhHex, oraclePkHex, priceTarget, vaultSalt)
     return contract.address
   } catch (error) {

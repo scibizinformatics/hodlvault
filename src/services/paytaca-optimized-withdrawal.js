@@ -16,7 +16,8 @@ export async function paytacaOptimizedWithdrawal(
   try {
     const minerFee = 1000n
     const utxos = await contract.getUtxos()
-    console.log('UTXOs available for withdrawal:', utxos)
+    console.log('utxos:', utxos)
+    console.log('utxos length:', utxos.length)
     const utxo = utxos.reduce((best, current) =>
       current.satoshis > best.satoshis ? current : best,
     )

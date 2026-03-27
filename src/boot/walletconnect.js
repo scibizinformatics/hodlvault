@@ -9,6 +9,12 @@ import { boot } from 'quasar/wrappers'
 import SignClient from '@walletconnect/sign-client'
 import { WalletConnectModal } from '@walletconnect/modal'
 import { base64ToBin, binToHex, hexToBin, secp256k1, sha256 } from '@bitauth/libauth'
+import {
+  cashAddressToLockingBytecode,
+  lockingBytecodeToBase58Address,
+  encodeBase58Address,
+  decodeBase58Address,
+} from '@bitauth/libauth'
 
 // Paytaca/WalletConnect v2 BCH chain IDs (wc2-bch-bcr spec)
 // bch:bchtest = testnet3, bch:chipnet = chipnet, bch:bitcoincash = mainnet, bch:bchreg = regtest
@@ -144,6 +150,40 @@ function tryExtractCompactSignature(buffer) {
     }
   }
   return null
+}
+
+function toLegacyAddress(address = '') {
+  const lockingBytecode = cashAddressToLockingBytecode(address)
+  if (typeof lockingBytecode === 'string') throw lockingBytecode
+
+  const legacyAddress = lockingBytecodeToBase58Address(lockingBytecode.bytecode)
+  if (typeof legacyAddress !== 'string') {
+    return encodeBase58Address(legacyAddress.type, legacyAddress.payload)
+  }
+  return legacyAddress
+}
+
+function addressToPkHash(address = '') {
+  const legacyAddress = toLegacyAddress(address)
+
+  // Decode the Base58Check-encoded legacy address
+  const decodedLegacyAddress = decodeBase58Address(legacyAddress)
+  if (typeof decodedLegacyAddress === 'string') throw decodedLegacyAddress
+
+  return binToHex(decodedLegacyAddress.payload)
+}
+
+export async function recoverPublicKeyHash() {
+  const wallet = JSON.parse(localStorage.getItem('hodl-vault-wallet'))
+  console.log('Wallet from localStorage:', wallet)
+
+  const address = wallet?.address
+  if (!address) {
+    throw new Error('No wallet address found in store')
+  }
+  const pkHash = addressToPkHash(address)
+  console.log('Recovered public key hash:', pkHash)
+  return addressToPkHash(address)
 }
 
 export async function recoverPublicKey(store) {

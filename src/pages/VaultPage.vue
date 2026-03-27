@@ -102,31 +102,6 @@
                 </div>
 
                 <!-- Amount Input -->
-                <div class="q-mb-lg">
-                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                    Amount to Deposit (satoshis)
-                  </label>
-                  <q-input
-                    v-model.number="form.amount"
-                    type="number"
-                    outlined
-                    dark
-                    placeholder="Enter amount in satoshis"
-                    class="text-h6"
-                    input-class="text-center"
-                    style="background-color: #2a2a2a"
-                    :rules="[
-                      (val) => val > 0 || 'Amount must be greater than 0',
-                      (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
-                    ]"
-                    hint="This amount will be requested from your Paytaca wallet to fund contract"
-                    persistent-hint
-                  >
-                    <template v-slot:prepend>
-                      <q-icon name="currency_bitcoin" color="primary" />
-                    </template>
-                  </q-input>
-                </div>
 
                 <!-- Target Price Input -->
                 <div class="q-mb-lg">
@@ -223,24 +198,7 @@
               </template>
             </q-banner>
           </div>
-          <div v-else-if="hasWallet && !hasPublicKey" class="q-mt-md">
-            <q-banner class="bg-warning text-dark">
-              <template v-slot:avatar>
-                <q-icon name="info" />
-              </template>
-              Public key not available. Verify your identity to continue.
-              <template v-slot:action>
-                <q-btn
-                  flat
-                  color="primary"
-                  label="VERIFY IDENTITY"
-                  :loading="verifyingIdentity"
-                  :disable="verifyingIdentity"
-                  @click="onVerifyIdentity"
-                />
-              </template>
-            </q-banner>
-          </div>
+
           <div v-else class="q-mt-md text-grey-7">
             Connect your wallet and verify your identity to create a vault.
           </div>
@@ -261,6 +219,7 @@
 </template>
 
 <script>
+import { recoverPublicKeyHash } from 'src/boot/walletconnect'
 import { defineComponent } from 'vue'
 import {
   calculateContractAddress,
@@ -329,8 +288,7 @@ export default defineComponent({
         this.form.amount >= 1000 &&
         this.form.priceTarget &&
         this.form.priceTarget > 0 &&
-        this.oracleData.oracle_pubkey_hex &&
-        this.hasPublicKey
+        this.oracleData.oracle_pubkey_hex
       )
     },
 
@@ -517,7 +475,7 @@ export default defineComponent({
           return
         }
 
-        const ownerPkhHex = this.getOwnerPkhHex()
+        const ownerPkhHex = await recoverPublicKeyHash()
         const oraclePkHex = this.oracleData.oracle_pubkey_hex
         const priceTargetCents = Math.floor(this.form.priceTarget * 100)
 

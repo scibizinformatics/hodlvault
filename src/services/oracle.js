@@ -55,26 +55,26 @@ export async function fetchOraclePrice() {
 
     // Create a properly formatted oracle message
     // Format: [timestamp][price_in_cents][asset_code]
-    const timestampHex = currentTimestamp.toString(16).padStart(8, '0').slice(-8)
-    const priceHex = currentPriceInCents.toString(16).padStart(8, '0')
-
     // Convert to Little-Endian format (reverse hex string)
-    const timestampHexLE = timestampHex.match(/.{2}/g).reverse().join('')
-    const priceHexLE = priceHex.match(/.{2}/g).reverse().join('')
 
     // Add asset code for USD (empty for now, as we're focusing on the price)
-    const messageHex = timestampHexLE + priceHexLE
 
     clearTimeout(timeoutId)
 
     // Note: We don't have the actual signature from the API, so we'll use a placeholder
     // In a production environment, you might need to use Server-Sent Events or other methods
     // to get the actual signed message
+    const _oracleResponse = await fetch(
+      `https://oracles.generalprotocols.com/api/v1/oracleMessages?publicKey=${ORACLE_PUBKEY}&count=1`,
+    )
+    const oracleMessageData = await _oracleResponse.json()
+    const oracleMessage = oracleMessageData.oracleMessages[0]
+    console.log('Fetched latest oracle message:', oracleMessage)
+
     return {
       price: priceInUSD,
-      message_hex: messageHex,
-      signature_hex:
-        '3044022044f7d0438553f6fb52be62a94e6d676c6d47536f6a101f51f76257931db14030022009073ba73e721684db25397e73d6c210', // Placeholder signature
+      message_hex: oracleMessage.message,
+      signature_hex: oracleMessage.signature,
       oracle_pubkey_hex: ORACLE_PUBKEY,
       status: 'success',
       source: 'oracles.cash',

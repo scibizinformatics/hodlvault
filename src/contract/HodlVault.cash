@@ -14,15 +14,9 @@ pragma cashscript ^0.11.0;
  */
 contract HodlVault(bytes20 ownerPkh, pubkey oraclePk, int priceTarget) {
   function spend(
-    pubkey ownerPk,
-    sig ownerSig,
     bytes oracleMessage,
     datasig oracleSig
   ) {
-    // 1. Owner must match stored pkh and sign the transaction
-    require(hash160(ownerPk) == ownerPkh);
-    require(checkSig(ownerSig, ownerPk));
-
     // 2. Oracle must have signed the message (checkDataSig)
     require(checkDataSig(oracleSig, oracleMessage, oraclePk));
 

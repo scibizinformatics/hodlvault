@@ -556,16 +556,11 @@ export default defineComponent({
       console.log(this.vault)
       this.withdrawing = true
       try {
-        const ownerPkHex = await this.$walletConnect.recoverPublicKey()
-        console.log('Recovered public key from WalletConnect:', ownerPkHex)
-
         await paytacaOptimizedWithdrawal(
           this.vault.contract,
           ownerAddress,
           this.oracleData.message_hex,
           this.oracleData.signature_hex,
-          ownerPkHex,
-          (method, params) => wc.request(method, params),
         )
 
         this.$q.notify({

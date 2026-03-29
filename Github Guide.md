@@ -363,3 +363,239 @@ Key Principles:
 - Local first when you have existing code to upload
 - Always use --allow-unrelated-histories for first-time connections
 - Remote changes require git pull before git push
+
+13. Branch Management & Collaboration (Team Workflows)
+
+Use these commands and patterns when working with branches for features, bugs, or team collaboration.
+
+# git checkout -b <branch-name>
+
+The Timeline Split. Creates a new branch from your current location.
+Example: git checkout -b feature-authentication
+Use when: Starting new feature or bug fix work.
+
+# git branch <branch-name>
+
+The Bookmark. Creates a branch without switching to it.
+Example: git branch feature-payment
+Use when: Creating branch for someone else to work on.
+
+# git checkout <branch-name>
+
+The Timeline Jump. Switches to an existing branch.
+Example: git checkout main
+Use when: Moving between different features or fixes.
+
+# git branch -D <branch-name>
+
+The Memory Wipe. Deletes a branch permanently.
+Example: git branch -D old-feature
+Warning: Cannot delete branch if it's being used by a worktree.
+
+# git push -u origin <branch-name>
+
+The Remote Share. Uploads a new branch to GitHub for others to see.
+Example: git push -u origin feature-authentication
+Use when: Sharing branch with team members or mentor.
+
+# git merge <branch-name>
+
+The Combination. Merges another branch's changes into your current branch.
+Example: git merge feature-authentication
+Use when: Bringing completed feature into main branch.
+
+# git diff <branch1> <branch2>
+
+The Comparison. Shows differences between two branches.
+Example: git diff main feature-authentication
+Use when: Reviewing changes before merging.
+
+Collaboration Workflows:
+
+Workflow A: Mentor Help Setup
+
+1. Create clean branch for mentor:
+   git checkout -b mentor-help-bugfix
+   
+2. Push branch to GitHub:
+   git push -u origin mentor-help-bugfix
+   
+3. Share GitHub link with mentor:
+   https://github.com/username/repo/tree/mentor-help-bugfix
+   
+4. Switch back to your own work:
+   git checkout main
+   git checkout -b my-attempt
+
+Workflow B: Team Feature Development
+
+1. Create feature branch:
+   git checkout -b feature-new-dashboard
+   
+2. Work and commit changes:
+   git add . && git commit -m "Add dashboard layout"
+   
+3. Push for team review:
+   git push -u origin feature-new-dashboard
+   
+4. Team member reviews and merges:
+   git checkout main
+   git merge feature-new-dashboard
+
+Workflow C: Bug Fix Isolation
+
+1. Create bug fix branch:
+   git checkout -b fix-login-issue
+   
+2. Test and fix the bug:
+   git add . && git commit -m "Fix login validation"
+   
+3. Push and test:
+   git push -u origin fix-login-issue
+   
+4. Merge when confirmed:
+   git checkout main
+   git merge fix-login-issue
+
+14. Common Git Errors & Solutions (The Troubleshooting Guide)
+
+Use these fixes for the most common Git problems you'll encounter.
+
+Error: "no upstream branch"
+
+The Problem: Local branch doesn't know which remote branch to push to.
+The Fix: git push -u origin main
+Use when: First time pushing a new branch.
+
+Error: "fetch first" / "non-fast-forward"
+
+The Problem: Remote has commits your local branch doesn't have.
+The Fix: git pull origin main
+Use when: Someone else pushed changes before you.
+
+Error: "unrelated histories"
+
+The Problem: Two separate Git histories that never connected.
+The Fix: git pull origin main --allow-unrelated-histories
+Use when: Connecting local project to existing GitHub repo.
+
+Error: "Cannot update paths and switch to branch"
+
+The Problem: Branch name contains spaces or special characters.
+The Fix: git checkout -b branch-name-with-hyphens
+Use when: Creating branches with readable names.
+
+Error: "refusing to merge unrelated histories"
+
+The Problem: Git won't merge two completely separate histories.
+The Fix: git pull origin main --allow-unrelated-histories
+Use when: First-time repository connection.
+
+Error: "worktree contains modified files"
+
+The Problem: Trying to delete worktree with uncommitted changes.
+The Fix: git worktree remove --force <path>
+Use when: Cleaning up AI experiment worktrees.
+
+15. Project Duplication & Snapshots (The Backup System)
+
+Use these commands to create copies of your project for testing or backup.
+
+# git clone <url> <destination>
+
+The Perfect Copy. Downloads complete repository with all history.
+Example: git clone https://github.com/user/repo.git ../backup-copy
+Use when: Creating complete project duplicate.
+
+# git clone --branch <branch-name> <url>
+
+The Snapshot Copy. Downloads specific branch state.
+Example: git clone --branch v1.2.0 https://github.com/user/repo.git ../version-1-2
+Use when: Need specific version or branch.
+
+# git clone --depth 1 <url>
+
+The Lightweight Copy. Downloads only latest state (no history).
+Example: git clone --depth 1 https://github.com/user/repo.git ../quick-copy
+Use when: Need current files only, faster download.
+
+# git archive --format zip --output <file> HEAD
+
+The Time Capsule. Creates zip archive of current state.
+Example: git archive --format zip --output ../project-backup.zip HEAD
+Use when: Creating snapshot without Git repository.
+
+# git checkout <commit-hash>
+
+The Time Machine. Goes to specific point in history.
+Example: git checkout abc1234
+Use when: Need to see or work from specific commit.
+
+Backup Strategies:
+
+Strategy A: Complete Project Backup
+1. Clone to backup location:
+   git clone https://github.com/user/repo.git ../project-backup
+   
+2. Work independently in both locations:
+   cd ../project-backup (backup version)
+   cd ../project (main version)
+
+Strategy B: Version Snapshots
+1. Create dated backups:
+   git clone --depth 1 https://github.com/user/repo.git ../backups/$(date +%Y%m%d)
+   
+2. Creates folders like:
+   backups/20250327/, backups/20250328/, etc.
+
+Strategy C: Feature Branch Backup
+1. Create backup branch:
+   git checkout -b backup-before-big-changes
+   
+2. Push for safekeeping:
+   git push -u origin backup-before-big-changes
+
+16. Git Graph Colors & Visualization (Understanding the Display)
+
+Use this guide to understand what Git graph colors and symbols mean.
+
+Color Meanings (VS Code Git Graph):
+
+Blue = Your current active branch
+- Blue dots = Commits on your current branch
+- Blue labels = Your local branch names
+
+Purple/Orange = Remote branches
+- Purple dots = Commits on remote branches
+- Purple labels = Remote branch names (origin/main, etc.)
+
+Mixed Colors = Merged histories
+- Different colors show different lineages
+- Merge commits connect different colored lines
+
+Graph Symbols:
+
+Target icon (📍) = Currently checked-out branch/commit
+Circle dots = Individual commits
+Lines = Parent-child relationships between commits
+Labels = Branch names pointing to specific commits
+
+Common Graph Patterns:
+
+Linear line = Straight history, no branches
+Split lines = Branch creation
+Joined lines = Merge operations
+Parallel lines = Separate development paths
+
+What This Means for Your Workflow:
+
+- Orange dots = Your local work
+- Blue dots = Your current branch
+- Purple dots = Remote/GitHub state
+- Mixed colors = Merged histories from different sources
+
+Understanding your Git graph helps you:
+- See where branches diverged
+- Understand merge conflicts
+- Track project history
+- Identify which commits belong to which branches

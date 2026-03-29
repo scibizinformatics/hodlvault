@@ -239,7 +239,7 @@ export default defineComponent({
   data() {
     return {
       form: {
-        amount: null,
+        // amount: null,
         priceTarget: null,
         vaultName: '',
       },
@@ -282,10 +282,16 @@ export default defineComponent({
     },
 
     canLockFunds() {
+      console.log('canlockFunds debug:', {
+        hasWallet: this.hasWallet,
+        amount: this.form.amount,
+        priceTarget: this.form.priceTarget,
+        oracle_pubkey_hex: this.oracleData.oracle_pubkey_hex,
+      })
       return (
         this.hasWallet &&
-        this.form.amount &&
-        this.form.amount >= 1000 &&
+        // this.form.amount &&
+        // this.form.amount >= 1000 &&
         this.form.priceTarget &&
         this.form.priceTarget > 0 &&
         this.oracleData.oracle_pubkey_hex

@@ -37,6 +37,8 @@ export default defineConfig((/* ctx */) => {
         node: 'node20',
       },
 
+      sourceMap: true, // Enable source maps for debugging
+
       vueRouterMode: 'hash', // available values: 'hash', 'history'
       // vueRouterBase,
       // vueDevtools,

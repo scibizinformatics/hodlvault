@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-none" style="background-color: #121212">
+  <q-page class="q-pa-none hero-page-background">
     <div class="hero-section">
       <div class="container text-center">
         <div class="hero-content q-py-xl">
@@ -62,16 +62,67 @@ export default defineComponent({
 </script>
 
 <style scoped>
+.hero-page-background {
+  background-image:
+    radial-gradient(
+      ellipse at center,
+      rgba(18, 18, 18, 0.9) 0%,
+      rgba(18, 18, 18, 0.7) 30%,
+      rgba(18, 18, 18, 0.4) 50%,
+      rgba(18, 18, 18, 0) 70%
+    ),
+    url('/src/assets/images/background image2.webp');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  min-height: 100vh;
+}
+
 .hero-section {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  background-image:
+    radial-gradient(
+      ellipse at center,
+      rgba(18, 18, 18, 0.9) 0%,
+      rgba(18, 18, 18, 0.7) 30%,
+      rgba(18, 18, 18, 0.4) 50%,
+      rgba(18, 18, 18, 0) 70%
+    ),
+    url('/src/assets/images/background image2.webp');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.hero-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to right,
+    rgba(18, 18, 18, 0.9) 0%,
+    rgba(18, 18, 18, 0.6) 20%,
+    rgba(18, 18, 18, 0.3) 35%,
+    rgba(18, 18, 18, 0) 50%,
+    rgba(18, 18, 18, 0.3) 65%,
+    rgba(18, 18, 18, 0.6) 80%,
+    rgba(18, 18, 18, 0.9) 100%
+  );
+  pointer-events: none;
 }
 
 .container {
   max-width: 800px;
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .hero-content {
@@ -101,5 +152,36 @@ export default defineComponent({
 
 .q-btn--outline.color-primary:hover {
   background-color: rgba(0, 213, 136, 0.1) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .hero-section {
+    background-image:
+      linear-gradient(
+        to right,
+        rgba(18, 18, 18, 1) 0%,
+        rgba(18, 18, 18, 0.7) 20%,
+        rgba(18, 18, 18, 0.3) 40%,
+        rgba(18, 18, 18, 0) 50%,
+        rgba(18, 18, 18, 0.3) 60%,
+        rgba(18, 18, 18, 0.7) 80%,
+        rgba(18, 18, 18, 1) 100%
+      ),
+      url('/src/assets/images/background image2.webp');
+  }
+
+  .hero-section::before {
+    background: linear-gradient(
+      to right,
+      rgba(18, 18, 18, 0.8) 0%,
+      rgba(18, 18, 18, 0.5) 25%,
+      rgba(18, 18, 18, 0.2) 40%,
+      rgba(18, 18, 18, 0) 50%,
+      rgba(18, 18, 18, 0.2) 60%,
+      rgba(18, 18, 18, 0.5) 75%,
+      rgba(18, 18, 18, 0.8) 100%
+    );
+  }
 }
 </style>

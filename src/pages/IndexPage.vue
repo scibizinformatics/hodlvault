@@ -1,10 +1,16 @@
 <template>
-  <q-page class="q-pa-none hero-page-background">
+  <q-page class="q-pa-none" :class="{ 'hero-page-background': $q.dark.isActive }">
     <div class="hero-section">
       <div class="container text-center">
         <div class="hero-content q-py-xl">
-          <h1 class="text-h2 text-weight-bold text-white q-mb-md">Force-HODL Your Bitcoin Cash</h1>
-          <p class="text-h5 text-grey-6 q-mb-xl">
+          <h1
+            class="text-h2 text-weight-bold"
+            :class="$q.dark.isActive ? 'text-white' : 'text-dark'"
+            q-mb-md
+          >
+            Force-HODL Your Bitcoin Cash
+          </h1>
+          <p class="text-h5" :class="$q.dark.isActive ? 'text-grey-6' : 'text-grey-8'" q-mb-xl>
             Lock your BCH in smart contracts that only unlock when your price target is met. No more
             emotional selling, just disciplined investing.
           </p>
@@ -85,12 +91,15 @@ export default defineComponent({
   justify-content: center;
   position: relative;
   background-image:
-    radial-gradient(
-      ellipse at center,
+    linear-gradient(
+      to right,
       rgba(18, 18, 18, 0.9) 0%,
-      rgba(18, 18, 18, 0.7) 30%,
-      rgba(18, 18, 18, 0.4) 50%,
-      rgba(18, 18, 18, 0) 70%
+      rgba(18, 18, 18, 0.6) 20%,
+      rgba(18, 18, 18, 0.3) 35%,
+      rgba(18, 18, 18, 0) 50%,
+      rgba(18, 18, 18, 0.3) 65%,
+      rgba(18, 18, 18, 0.6) 80%,
+      rgba(18, 18, 18, 0.9) 100%
     ),
     url('/src/assets/images/background image2.webp');
   background-size: cover;
@@ -116,6 +125,35 @@ export default defineComponent({
     rgba(18, 18, 18, 0.9) 100%
   );
   pointer-events: none;
+}
+
+/* Light mode specific styles */
+.body--light .hero-section::before {
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0.6) 20%,
+    rgba(255, 255, 255, 0.3) 35%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.3) 65%,
+    rgba(255, 255, 255, 0.6) 80%,
+    rgba(255, 255, 255, 0.9) 100%
+  );
+}
+
+.body--light .hero-section {
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.9) 0%,
+      rgba(255, 255, 255, 0.6) 20%,
+      rgba(255, 255, 255, 0.3) 35%,
+      rgba(255, 255, 255, 0) 50%,
+      rgba(255, 255, 255, 0.3) 65%,
+      rgba(255, 255, 255, 0.6) 80%,
+      rgba(255, 255, 255, 0.9) 100%
+    ),
+    url('/src/assets/images/background image2.webp');
 }
 
 .container {
@@ -154,34 +192,8 @@ export default defineComponent({
   background-color: rgba(0, 213, 136, 0.1) !important;
 }
 
-/* Responsive adjustments */
+/* Responsive adjustments - background removed since it's handled by hero-page-background */
 @media (max-width: 768px) {
-  .hero-section {
-    background-image:
-      linear-gradient(
-        to right,
-        rgba(18, 18, 18, 1) 0%,
-        rgba(18, 18, 18, 0.7) 20%,
-        rgba(18, 18, 18, 0.3) 40%,
-        rgba(18, 18, 18, 0) 50%,
-        rgba(18, 18, 18, 0.3) 60%,
-        rgba(18, 18, 18, 0.7) 80%,
-        rgba(18, 18, 18, 1) 100%
-      ),
-      url('/src/assets/images/background image2.webp');
-  }
-
-  .hero-section::before {
-    background: linear-gradient(
-      to right,
-      rgba(18, 18, 18, 0.8) 0%,
-      rgba(18, 18, 18, 0.5) 25%,
-      rgba(18, 18, 18, 0.2) 40%,
-      rgba(18, 18, 18, 0) 50%,
-      rgba(18, 18, 18, 0.2) 60%,
-      rgba(18, 18, 18, 0.5) 75%,
-      rgba(18, 18, 18, 0.8) 100%
-    );
-  }
+  /* Mobile styles for layout only - background handled by hero-page-background class */
 }
 </style>

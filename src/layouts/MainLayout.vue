@@ -8,6 +8,20 @@
 
         <q-space />
 
+        <!-- Dark/Light Mode Toggle -->
+        <q-btn
+          flat
+          round
+          :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'"
+          :color="$q.dark.isActive ? 'white' : 'black'"
+          @click="toggleTheme"
+          class="q-mr-sm"
+        >
+          <q-tooltip>
+            {{ $q.dark.isActive ? 'Light Mode' : 'Dark Mode' }}
+          </q-tooltip>
+        </q-btn>
+
         <!-- Debug Mock Connect Button - Corner -->
         <q-btn
           v-if="!connectedAddress"
@@ -84,6 +98,9 @@ export default defineComponent({
   mounted() {
     // Start watching wallet connection status changes
     this.startWalletStatusWatcher()
+
+    // Initialize theme from localStorage
+    this.initializeTheme()
   },
 
   beforeUnmount() {
@@ -92,6 +109,24 @@ export default defineComponent({
   },
 
   methods: {
+    initializeTheme() {
+      // Load theme from localStorage
+      const savedTheme = localStorage.getItem('theme')
+
+      if (savedTheme) {
+        // Apply saved theme
+        if (savedTheme === 'dark') {
+          this.$q.dark.set(true)
+        } else {
+          this.$q.dark.set(false)
+        }
+      } else {
+        // Auto-detect system preference
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        this.$q.dark.set(prefersDark)
+      }
+    },
+
     startWalletStatusWatcher() {
       // Clear any existing interval
       this.stopWalletStatusWatcher()
@@ -171,6 +206,13 @@ export default defineComponent({
         message: 'Mock connection established',
         icon: 'check_circle',
       })
+    },
+
+    toggleTheme() {
+      // Toggle between dark and light mode
+      this.$q.dark.toggle()
+      // Save user preference to localStorage
+      localStorage.setItem('theme', this.$q.dark.isActive ? 'dark' : 'light')
     },
   },
 })

@@ -23,18 +23,70 @@
   background-color: rgba(0, 213, 136, 0.1) !important;
 }
 
-// Dark theme overrides
-.q-field--dark .q-field__control {
+// Dark theme overrides (only apply when body has dark class)
+.body--dark .q-field__control {
   background-color: #2a2a2a !important;
   border-color: #444 !important;
 }
 
-.q-field--dark .q-field__control:before {
+.body--dark .q-field__control:before {
   border-color: #444 !important;
 }
 
-.q-field--dark.q-field--filled .q-field__control:before {
+.body--dark.q-field--filled .q-field__control:before {
   border-bottom: 1px solid #444 !important;
+}
+
+.body--dark .q-field__native,
+.body--dark .q-field__prefix,
+.body--dark .q-field__suffix,
+.body--dark .q-field__input {
+  color: #fff !important;
+}
+
+// Light theme overrides (only apply when body has light class)
+.body--light {
+  background-color: #f5f5f5 !important;
+
+  .q-field__control {
+    background-color: #ffffff !important;
+    border-color: #e1e4e8 !important;
+    color: #212529 !important;
+  }
+
+  .q-field__control:before {
+    border-color: #e1e4e8 !important;
+  }
+
+  .q-field--filled .q-field__control:before {
+    border-bottom: 1px solid #e1e4e8 !important;
+  }
+
+  .q-card {
+    background-color: #ffffff !important;
+    border-color: #e1e4e8 !important;
+  }
+
+  // Text color fixes for light mode
+  .text-white {
+    color: #212529 !important;
+  }
+
+  .text-grey-4 {
+    color: #6c757d !important;
+  }
+
+  .text-grey-6 {
+    color: #495057 !important;
+  }
+
+  // Input field text colors for light mode
+  .q-field__native,
+  .q-field__prefix,
+  .q-field__suffix,
+  .q-field__input {
+    color: #212529 !important;
+  }
 }
 
 // Card styling

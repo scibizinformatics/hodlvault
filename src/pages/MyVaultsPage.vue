@@ -1,21 +1,35 @@
 <template>
-  <q-page class="q-pa-lg" style="background-color: #121212">
+  <q-page class="q-pa-lg" :class="$q.dark.isActive ? 'bg-dark' : 'bg-white'">
     <div class="container">
       <div class="row justify-center">
         <div class="col-12 col-md-10 col-lg-8">
           <!-- Header -->
           <div class="text-center q-mb-xl">
-            <h1 class="text-h4 text-weight-bold text-white q-mb-md">My Vaults</h1>
-            <p class="text-grey-6 q-mb-lg">Manage all your BCH HODL vaults in one place</p>
+            <h1
+              class="text-h4 text-weight-bold"
+              :class="$q.dark.isActive ? 'text-white' : 'text-grey-9'"
+              q-mb-md
+            >
+              My Vaults
+            </h1>
+            <p :class="$q.dark.isActive ? 'text-grey-6' : 'text-grey-7'" q-mb-lg>
+              Manage all your BCH HODL vaults in one place
+            </p>
 
             <!-- Connected Wallet Info -->
             <q-card
               flat
               bordered
               class="q-pa-md inline-block"
-              style="background-color: #1e1e1e; border-color: #333"
+              :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-1'"
             >
-              <div class="text-subtitle2 text-grey-4 q-mb-sm">Connected Wallet</div>
+              <div
+                class="text-subtitle2"
+                :class="$q.dark.isActive ? 'text-grey-4' : 'text-grey-7'"
+                q-mb-sm
+              >
+                Connected Wallet
+              </div>
               <div class="text-body2 text-primary">
                 {{ connectedAddress || 'Not Connected' }}
               </div>
@@ -25,13 +39,24 @@
           <!-- Vault List -->
           <div v-if="loading" class="text-center q-pa-xl">
             <q-spinner-dots color="primary" size="64px" />
-            <div class="text-grey-4 q-mt-md">Loading your vaults...</div>
+            <div :class="$q.dark.isActive ? 'text-grey-4' : 'text-grey-7'" class="q-mt-md">
+              Loading your vaults...
+            </div>
           </div>
 
           <div v-else-if="vaults.length === 0" class="text-center q-pa-xl">
-            <q-icon name="account_balance" size="64px" class="text-grey-6 q-mb-md" />
-            <h3 class="text-h5 text-grey-4 q-mb-md">No Vaults Found</h3>
-            <p class="text-grey-6 q-mb-lg">
+            <q-icon
+              name="account_balance"
+              size="64px"
+              :class="$q.dark.isActive ? 'text-grey-6 q-mb-md' : 'text-grey-7 q-mb-md'"
+            />
+            <h3
+              class="text-h5"
+              :class="$q.dark.isActive ? 'text-grey-4 q-mb-md' : 'text-grey-7 q-mb-md'"
+            >
+              No Vaults Found
+            </h3>
+            <p :class="$q.dark.isActive ? 'text-grey-6' : 'text-grey-8'" q-mb-lg>
               You haven't created any vaults yet. Start by creating your first HODL vault.
             </p>
             <q-btn

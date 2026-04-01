@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-lg" style="background-color: #121212">
+  <q-page class="q-pa-lg" :class="$q.dark.isActive ? 'bg-dark' : 'bg-white'">
     <div class="container">
       <div class="row justify-center">
         <div class="col-12 col-md-8 col-lg-6">
@@ -8,12 +8,14 @@
             flat
             bordered
             class="q-mb-lg"
-            style="background-color: #1e1e1e; border-color: #333"
+            :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-white'"
           >
             <q-card-section class="row items-center q-gutter-md">
               <div v-if="priceLoading" class="row items-center q-gutter-sm">
                 <q-spinner-dots color="primary" size="32px" />
-                <span class="text-grey-4">Fetching Oracle price...</span>
+                <span :class="$q.dark.isActive ? 'text-grey-4' : 'text-grey-7'"
+                  >Fetching Oracle price...</span
+                >
               </div>
               <div v-else-if="oracleSuccess" class="row items-center q-gutter-sm full-width">
                 <q-icon name="check_circle" color="positive" size="32px" />

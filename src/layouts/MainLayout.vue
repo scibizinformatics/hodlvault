@@ -1,6 +1,6 @@
 <template>
   <q-layout view="lHh Lpr lFf">
-    <q-header elevated class="bg-dark text-white">
+    <q-header elevated :class="$q.dark.isActive ? 'bg-dark text-white' : 'bg-white text-dark'">
       <q-toolbar>
         <q-toolbar-title class="text-weight-bold cursor-pointer" @click="$router.push('/')">
           HodlVault
@@ -60,7 +60,9 @@
       <router-view />
     </q-page-container>
 
-    <q-footer class="bg-transparent text-grey-8">
+    <q-footer
+      :class="$q.dark.isActive ? 'bg-transparent text-grey-8' : 'bg-transparent text-grey-6'"
+    >
       <div class="row justify-center q-pa-sm">
         <div class="text-caption" style="opacity: 0.4; font-size: 10px; line-height: 1.2">
           System Version: v2.3.0 | Network: CHIPNET

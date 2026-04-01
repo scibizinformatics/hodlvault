@@ -1,16 +1,30 @@
 <template>
   <q-page class="q-pa-none" :class="{ 'hero-page-background': $q.dark.isActive }">
     <div class="hero-section">
+      <!-- Mascot Images - Conditionally rendered based on theme -->
+      <img
+        v-if="$q.dark.isActive"
+        src="/src/assets/images/MascotDark.webp"
+        alt="HodlVault Mascot"
+        class="mascot-image"
+      />
+      <img
+        v-else
+        src="/src/assets/images/MascotLight.webp"
+        alt="HodlVault Mascot"
+        class="mascot-image"
+      />
+
       <div class="container text-center">
         <div class="hero-content q-py-xl">
           <h1
             class="text-h2 text-weight-bold"
-            :class="$q.dark.isActive ? 'text-white' : 'text-dark'"
+            :class="$q.dark.isActive ? 'text-white' : 'text-grey-9'"
             q-mb-md
           >
             Force-HODL Your Bitcoin Cash
           </h1>
-          <p class="text-h5" :class="$q.dark.isActive ? 'text-grey-6' : 'text-grey-8'" q-mb-xl>
+          <p class="text-h5" :class="$q.dark.isActive ? 'text-grey-6' : 'text-grey-7'" q-mb-xl>
             Lock your BCH in smart contracts that only unlock when your price target is met. No more
             emotional selling, just disciplined investing.
           </p>
@@ -131,13 +145,13 @@ export default defineComponent({
 .body--light .hero-section::before {
   background: linear-gradient(
     to right,
-    rgba(255, 255, 255, 0.9) 0%,
-    rgba(255, 255, 255, 0.6) 20%,
-    rgba(255, 255, 255, 0.3) 35%,
-    rgba(255, 255, 255, 0) 50%,
-    rgba(255, 255, 255, 0.3) 65%,
-    rgba(255, 255, 255, 0.6) 80%,
-    rgba(255, 255, 255, 0.9) 100%
+    rgba(245, 245, 245, 0.9) 0%,
+    rgba(245, 245, 245, 0.6) 20%,
+    rgba(245, 245, 245, 0.3) 35%,
+    rgba(245, 245, 245, 0) 50%,
+    rgba(245, 245, 245, 0.3) 65%,
+    rgba(245, 245, 245, 0.6) 80%,
+    rgba(245, 245, 245, 0.9) 100%
   );
 }
 
@@ -145,13 +159,13 @@ export default defineComponent({
   background-image:
     linear-gradient(
       to right,
-      rgba(255, 255, 255, 0.9) 0%,
-      rgba(255, 255, 255, 0.6) 20%,
-      rgba(255, 255, 255, 0.3) 35%,
-      rgba(255, 255, 255, 0) 50%,
-      rgba(255, 255, 255, 0.3) 65%,
-      rgba(255, 255, 255, 0.6) 80%,
-      rgba(255, 255, 255, 0.9) 100%
+      rgba(245, 245, 245, 0.9) 0%,
+      rgba(245, 245, 245, 0.6) 20%,
+      rgba(245, 245, 245, 0.3) 35%,
+      rgba(245, 245, 245, 0) 50%,
+      rgba(245, 245, 245, 0.3) 65%,
+      rgba(245, 245, 245, 0.6) 80%,
+      rgba(245, 245, 245, 0.9) 100%
     ),
     url('/src/assets/images/background image2.webp');
 }
@@ -161,6 +175,42 @@ export default defineComponent({
   width: 100%;
   position: relative;
   z-index: 1;
+}
+
+.mascot-image {
+  position: absolute;
+  top: 50%;
+  right: 5%;
+  transform: translateY(-50%);
+  width: 1300px;
+  height: auto;
+  opacity: 0.9;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Responsive mascot positioning */
+@media (max-width: 1200px) {
+  .mascot-image {
+    width: 1000px;
+    right: 3%;
+  }
+}
+
+@media (max-width: 768px) {
+  .mascot-image {
+    width: 700px;
+    right: 2%;
+    top: 40%;
+  }
+}
+
+@media (max-width: 480px) {
+  .mascot-image {
+    width: 500px;
+    right: 3%;
+    top: 35%;
+  }
 }
 
 .hero-content {

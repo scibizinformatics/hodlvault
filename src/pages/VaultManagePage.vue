@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-lg" style="background-color: #121212">
+  <q-page class="q-pa-lg" :class="$q.dark.isActive ? 'bg-dark' : 'bg-white'">
     <div class="container">
       <div class="row justify-center">
         <div class="col-12 col-md-8 col-lg-6">
@@ -19,7 +19,7 @@
             flat
             bordered
             class="q-mb-lg"
-            style="background-color: #1e1e1e; border-color: #333"
+            :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-white'"
           >
             <q-card-section class="row items-center q-gutter-md">
               <div v-if="priceLoading" class="row items-center q-gutter-sm">
@@ -59,7 +59,7 @@
 
           <!-- Vault Status Section -->
           <div v-if="vault">
-            <q-card flat bordered style="background-color: #1e1e1e; border-color: #333">
+            <q-card flat bordered :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-white'">
               <q-card-section>
                 <h3 class="text-h5 text-weight-bold text-white q-mb-md">Vault Status</h3>
 
@@ -75,7 +75,6 @@
                     dark
                     class="monospace text-primary"
                     input-class="text-select"
-                    style="background-color: #2a2a2a"
                   />
                 </div>
 
@@ -92,7 +91,6 @@
                       dark
                       suffix="satoshis"
                       class="col"
-                      style="background-color: #2a2a2a"
                     />
                     <q-btn
                       flat
@@ -134,7 +132,6 @@
                         type="number"
                         outlined
                         dark
-                        style="background-color: #2a2a2a"
                         :rules="[
                           (val) => !!val || 'Amount is required',
                           (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
@@ -149,7 +146,6 @@
                         :loading="depositing"
                         :disable="!canDepositMore"
                         icon="account_balance_wallet"
-                        style="background-color: #00d588; color: #000"
                         @click="onDepositMore"
                       />
                     </div>
@@ -162,12 +158,7 @@
                     Vault Deposit QR
                   </label>
                   <div class="row items-center q-gutter-md">
-                    <q-card
-                      flat
-                      bordered
-                      class="q-pa-sm flex flex-center"
-                      style="background-color: #2a2a2a; border-color: #444"
-                    >
+                    <q-card flat bordered class="q-pa-sm flex flex-center">
                       <QrcodeVue :value="vault.contractAddress" :size="160" />
                     </q-card>
                     <div class="text-body2 text-grey-6">
@@ -188,7 +179,6 @@
                       readonly
                       outlined
                       dark
-                      style="background-color: #2a2a2a"
                     />
                   </div>
                   <div class="col-12 col-md-6">
@@ -203,7 +193,6 @@
                       outlined
                       dark
                       :color="canWithdraw ? 'positive' : 'negative'"
-                      style="background-color: #2a2a2a"
                     />
                   </div>
                 </div>
@@ -224,7 +213,6 @@
                       icon="account_balance"
                       size="lg"
                       class="text-weight-bold"
-                      style="background-color: #00d588; color: #000"
                       padding="md xl"
                       @click="onWithdraw"
                     />
@@ -262,7 +250,7 @@
               flat
               bordered
               class="text-center q-pa-lg"
-              style="background-color: #1e1e1e; border-color: #333"
+              :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-white'"
             >
               <q-icon name="account_balance" size="64px" class="text-grey-6 q-mb-md" />
               <h3 class="text-h5 text-grey-4 q-mb-md">No Vault Selected</h3>
@@ -271,7 +259,6 @@
                 color="primary"
                 label="Go to My Vaults"
                 icon="list"
-                style="background-color: #00d588; color: #000"
                 @click="$router.push('/my-vaults')"
               />
             </q-card>

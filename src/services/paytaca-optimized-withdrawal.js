@@ -15,13 +15,11 @@ export async function paytacaOptimizedWithdrawal(
   console.log('contract:', contract)
   try {
     const minerFee = 1000n
-    const utxos = await contract.getUtxos()
-    console.log('utxos:', utxos)
-    console.log('utxos length:', utxos.length)
-    const utxo = utxos.reduce((best, current) =>
-      current.satoshis > best.satoshis ? current : best,
-    )
-    const amount = utxo.satoshis - minerFee
+    const balance = await contract.getBalance()
+    console.log('balance:', balance)
+
+    const amount = balance - minerFee
+    console.log('amount:', amount)
     const oracleSigBin = hexToBin(oracleSigHex)
     const txHex = await contract.functions
       .spend(hexToBin(oracleMessageHex), oracleSigBin)

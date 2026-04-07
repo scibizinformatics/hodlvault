@@ -1,9 +1,6 @@
 // Configuration for your app
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
-// Configuration for your app
-// https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
-
 module.exports = function (/* ctx */) {
   return {
     // https://v2.quasar.dev/quasar-cli-vite/prefetch-feature

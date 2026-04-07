@@ -2,7 +2,7 @@ Backend Implementation Plan: HodlVault Node.js Transition
 
 1. Project Mission and Context Engineering Initialization
 
-The HodlVault system is a secure, decentralized asset management interface utilizing the Quasar framework and Bitcoin Cash (BCH) smart contracts. This plan formalizes the transition of backend responsibilities—specifically oracle data signing—from the legacy Django architecture to a high-performance Node.js/Express signing service.
+The HodlVault system is a secure, decentralized asset management interface utilizing the Quasar framework and Bitcoin Cash (BCH) smart contracts. This plan formalizes the **creation** of backend responsibilities—specifically oracle data signing—using a new Node.js/Express signing service (no existing Django backend to migrate from).
 
 Context Engineering Initialization To initialize the environment, execute the following command sequence to load architectural constraints into active memory:
 
@@ -52,15 +52,17 @@ Package Manager pnpm (Workspace mode)
 
 TypeScript and Path Mapping: Initialize tsconfig.base.json in the root to handle absolute imports:
 
+```json
 {
-"compilerOptions": {
-"baseUrl": ".",
-"paths": {
-"@hodlvault/shared": ["packages/shared/src/index.ts"],
-"@/_": ["apps/backend/src/_"]
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@hodlvault/shared": ["packages/shared/src/index.ts"],
+      "@/_": ["apps/backend/src/_"]
+    }
+  }
 }
-}
-}
+```
 
 - Strictness: Interfaces are mandatory over types for data structures.
 - Immutability: Configuration objects must use as const assertions.
@@ -98,8 +100,28 @@ POST /api/v1/vault/sign POST Generates the datasig for the contract spend functi
 
 POST /api/v1/vault/sign Example:
 
-- Request Body:
-- Response Body:
+**Request Body:**
+
+```json
+{
+  "price": 50000,
+  "blockheight": 840000,
+  "network": "mainnet"
+}
+```
+
+**Response Body:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "oracleMessage": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "signature": "304402207fa9a3a1e8c4b5a6d7c8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0221008f1e2d3c4b5a6978563412abcdef0123456789abcdef0123456789abcdef0123",
+    "oraclePubkey": "02d09db08af1ff4e8453919cc866a4be427d7bfe18f2c05e5444c196fcf6fd2818"
+  }
+}
+```
 
 6. Shared Logic and Integration
 
@@ -151,3 +173,39 @@ Update .windsurfrules to enforce backend-specific rigor:
 
 - Refactor src/services/oracle.js to point to the new Express endpoints.
 - Update src/services/blockchain.js to use the shared serializeForWc utility.
+
+7. Validation Testing (Critical Pre-Implementation Step)
+
+**Task 1.5: Byte-Format Validation Suite**
+
+Before implementing the signing service, create a standalone validation test:
+
+```typescript
+// tests/byte-format-validation.test.ts
+import { bigIntToBinUint64LE, utf8ToBin, flattenBinaries } from '@bitauth/libauth'
+
+function validateOracleMessageFormat(price: number, blockheight: number): boolean {
+  // Law 1: Guard Clauses
+  if (price <= 0) throw new Error('Invalid price')
+  if (blockheight <= 0) throw new Error('Invalid blockheight')
+
+  const priceBuf = bigIntToBinUint64LE(BigInt(price))
+  const heightBuf = utf8ToBin(blockheight.toString())
+  const message = flattenBinaries([priceBuf, heightBuf])
+
+  // Critical validation: Ensure exactly 8-byte price prefix
+  const priceBytes = message.slice(0, 8)
+  if (priceBytes.length !== 8) {
+    throw new Error('Price bytes must be exactly 8 bytes')
+  }
+
+  // Validate this matches HodlVault.cash split(8)[0] expectation
+  return true
+}
+```
+
+**Success Criteria for Task 1.5:**
+
+- Test passes with sample price/blockheight combinations
+- Generated message format matches existing contract test vectors
+- Byte-length validation prevents off-by-one errors

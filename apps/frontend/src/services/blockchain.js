@@ -6,7 +6,7 @@
 
 import { Contract, ElectrumNetworkProvider } from 'cashscript'
 import HodlVaultArtifact from 'src/contract/HodlVault.json'
-import { hexToBin, binToHex } from '@bitauth/libauth'
+import { hexToBin, serializeForWc } from '@hodlvault/shared'
 import { createPaytacaPayload } from './paytaca-compat'
 import { paytacaRequestWithRecovery } from './paytaca-recovery'
 
@@ -17,19 +17,7 @@ const placeholderSignature = () => ({
   sighashType: 0x41, // SIGHASH_ALL | SIGHASH_UTXOS for covenant compatibility
 })
 
-/** Serialize object for JSON RPC (BigInt → string, Uint8Array → hex) */
-function serializeForWc(obj) {
-  if (obj === null || obj === undefined) return obj
-  if (typeof obj === 'bigint') return obj.toString()
-  if (obj instanceof Uint8Array) return binToHex(obj)
-  if (Array.isArray(obj)) return obj.map(serializeForWc)
-  if (typeof obj === 'object') {
-    const out = {}
-    for (const k of Object.keys(obj)) out[k] = serializeForWc(obj[k])
-    return out
-  }
-  return obj
-}
+// serializeForWc is now imported from @hodlvault/shared
 
 // Network configuration
 const DEFAULT_NETWORK =

@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@hodlvault/shared": ["packages/shared/src/index.ts"],
+      "@/_": ["apps/backend/src/_"]
+    }
+  }
+}

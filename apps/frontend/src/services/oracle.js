@@ -1,9 +1,11 @@
 /**
- * Service to interact with Oracles.cash Production Oracle
- * Using the official General Protocols Oracle API
+ * Service to interact with HodlVault Backend Oracle API
+ * Uses local Node.js backend for centralized oracle data management
  */
 
-export const ORACLE_PUBKEY = '02d09db08af1ff4e8453919cc866a4be427d7bfe18f2c05e5444c196fcf6fd2818' // USD/BCH Oracle
+import { ORACLE_PUBKEY } from '@hodlvault/shared'
+
+export { ORACLE_PUBKEY }
 
 /**
  * Creates a timeout controller for API requests
@@ -150,27 +152,54 @@ function createFallbackResponse(error) {
   }
 }
 
+/**
+ * Fetches oracle price from local HodlVault backend
+ * @returns {Promise<Object>} Oracle price response
+ */
 export async function fetchOraclePrice() {
   const { controller, timeoutId } = createTimeoutController()
 
   try {
-    // Fetch and validate oracle data
-    const oracleListResponse = await fetchOracleList(controller.signal)
-    const { currentPriceInCents, currentTimestamp } = validateOracleData(oracleListResponse)
+    // Fetch from local backend instead of General Protocols directly
+    const backendUrl = import.meta.env?.VITE_BACKEND_URL || 'http://localhost:3001'
+    const response = await fetch(`${backendUrl}/api/v1/oracle/price`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    })
 
-    // Convert and validate price
-    const priceInUSD = currentPriceInCents / 100
-    validatePriceRange(priceInUSD)
+    if (!response.ok) {
+      throw new Error(`Backend API returned status: ${response.status}`)
+    }
 
-    // Fetch oracle message for signature data
-    const oracleMessage = await fetchOracleMessage(ORACLE_PUBKEY)
-    console.log('Fetched latest oracle message:', oracleMessage)
+    const result = await response.json()
 
-    // Clean up timeout and return success response
+    if (!result.success) {
+      throw new Error(result.message || 'Backend API error')
+    }
+
+    const oracleData = result.data
+    console.log('Fetched oracle data from backend:', oracleData)
+
+    // Clean up timeout and return formatted response
     clearTimeout(timeoutId)
-    return createOracleResponse(priceInUSD, oracleMessage, currentTimestamp)
+    return {
+      price: oracleData.price,
+      message_hex: '', // Will be populated by backend signing endpoint
+      signature_hex: '', // Will be populated by backend signing endpoint
+      oracle_pubkey_hex: ORACLE_PUBKEY,
+      status: result.cached ? 'cached' : 'success',
+      source: 'hodlvault-backend',
+      timestamp: oracleData.blockheight,
+      note: result.cached ? 'Price from backend cache' : 'Fresh price from backend',
+      cached: result.cached,
+      backendData: oracleData,
+    }
   } catch (error) {
     clearTimeout(timeoutId)
+    console.error('Failed to fetch oracle price from backend:', error)
     return createFallbackResponse(error)
   }
 }

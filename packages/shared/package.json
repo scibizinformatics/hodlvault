@@ -1,0 +1,17 @@
+{
+  "name": "@hodlvault/shared",
+  "version": "1.0.0",
+  "description": "Shared TypeScript interfaces and utilities for HodlVault",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@bitauth/libauth": "^3.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

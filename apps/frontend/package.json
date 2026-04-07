@@ -4,6 +4,7 @@
   "description": "HodlVault Frontend - Quasar Vue 3 Application",
   "productName": "BCH Hodl Vault",
   "author": "Edo_Tensei <baliteeddmark@gmail.com>",
+  "type": "module",
   "private": true,
   "scripts": {
     "lint": "eslint -c ./eslint.config.js \"./src*/**/*.{js,cjs,mjs,vue}\"",

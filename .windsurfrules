@@ -2,65 +2,63 @@ say ”マスタ” at the beginning of every response
 
 ##### HodlVault2 Project Rules
 
-Every time you choose to apply a rule(s), explicitly state the rule(s) in the output. You can abbreviate the rule description to a single word or phrase [3, 4].
+Every time you choose to apply a rule(s), explicitly state the rule(s) in the output. You can abbreviate the rule description to a single word or phrase.
 
 ###### Project Context
 
-- **Purpose:** A secure vault application built with the Quasar framework and a Node.js backend, utilizing smart contracts for decentralized asset management [5, 6].
-- **High-Level Goal:** To provide a reliable interface and secure signing backend for managing blockchain-based vaults and automated withdrawal services [5, 6].
+- **Purpose:** A secure vault application built with the Quasar framework and a Node.js backend, utilizing smart contracts for decentralized asset management [4].
+- **High-Level Goal:** To provide a reliable interface and secure signing backend for managing blockchain-based vaults and automated withdrawal services [4].
 
 ###### Readable Code Laws (Target State)
 
-- **Law 1: Avoid Deep Nesting.** Use inversion (guard clauses) to collapse nested structures. Return early so the reader can discard previous conditions from their mind [7-9].
-- **Law 2: No Code Duplication.** Extract duplicated logic into shared, reusable functions or service modules. Prioritize modularization over copy-pasting [9, 10].
-- **Law 3: Meaningful Naming.** Use descriptive names that reveal intent (e.g., use auxiliary verbs like `isLoading`). Avoid shorthand that only the author understands [9, 11, 12].
-- **Extraction Rule:** Extract complex logic into its own named function to provide a "summary" of functionality at a glance [9, 13].
+- **Law 1: Avoid Deep Nesting.** Use inversion (guard clauses) to collapse nested structures. Return early so the reader can discard previous conditions from their mind [4].
+- **Law 2: No Code Duplication.** Extract duplicated logic into shared, reusable functions or service modules. Prioritize modularization over copy-pasting [5].
+- **Law 3: Meaningful Naming.** Use descriptive names that reveal intent (e.g., use auxiliary verbs like `isLoading`). Avoid shorthand that only the author understands [5].
+- **Extraction Rule:** Extract complex logic into its own named function to provide a "summary" of functionality at a glance [5].
+- **Cleanup Rule:** When migrating logic (e.g., from frontend to backend), immediately remove the corresponding unused legacy code to prevent ESLint `no-unused-vars` errors [6-8].
 
-###### Codebase Structure
+###### Codebase Structure (Monorepo)
 
-- `src/components/`: PascalCase Vue components [14, 15].
-- `src/services/`: kebab-case JavaScript logic for frontend blockchain/oracle operations [14, 15].
-- `server/`: Contains the Express.js API logic and signing services [5, 11].
-- `server/api-routes/`: Route definitions using lowercase-with-dashes [16].
-- `shared/`: Common TypeScript interfaces and validation logic used by both frontend and backend [11, 17].
-- `src/contract/`: CashScript smart contracts (.cash) and related JSON metadata [14].
-- `docs/` & `plans/`: Project documentation, reports, and implementation plans [18].
+- `apps/frontend/`: Quasar.js application [9, 10].
+- `apps/backend/`: Express.js API logic and signing services [10, 11].
+- `packages/shared/`: Common TypeScript interfaces, constants, and utilities used by both frontend and backend [10, 12].
+- `apps/frontend/src/contract/`: CashScript smart contracts (.cash) and related JSON metadata [10, 13].
+- `plans/`: Project implementation plans and blueprints [12, 14].
 
-###### Tech Stack
+###### Tech Stack & Module Standards
 
-- **Frontend:** Quasar.js (Vue 3/Vite) using JavaScript (ES6) [15, 19].
-- **Backend Runtime:** Node.js (Version 20+) [19].
-- **Backend Language:** TypeScript [11, 16].
-- **Backend Framework:** Express.js [11].
-- **Smart Contracts:** CashScript [15].
-- **Package Manager:** pnpm (version 10+) [15, 19].
+- **Package Manager:** pnpm (version 10+) using workspaces [15, 16].
+- **Frontend:** Quasar.js (Vue 3/Vite). Configuration files (e.g., `quasar.config.js`) MUST use **CommonJS (`module.exports`)** for compatibility [2, 17].
+- **Backend:** Node.js (Version 20+) with Express.js and TypeScript [14, 18].
+- **Shared Package:** TypeScript ESM [19, 20].
+- **Alias Resolution:** When working in `apps/frontend`, ensure Vite aliases (like `#q-app/wrappers`) are correctly resolved. Always run `pnpm install` and `quasar prepare` inside the frontend directory after structural changes [8, 21, 22].
 
 ###### Coding Patterns & Conventions
 
-- **Vue Style:** Use Vue 3 Composition API with `<script setup>` syntax [20].
+- **Vue Style:** Use Vue 3 Composition API with `<script setup>` syntax [14].
 - **Naming:**
-  - PascalCase for Vue components.
-  - kebab-case for all service, utility, and route files [16, 20].
-  - camelCase for functions and variables [16, 20].
-  - UPPER_SNAKE_CASE for constants (e.g., `ORACLE_PUBKEY`) [20].
-- **Exports:** Named exports for services/utilities; Default exports for Vue components [16, 17, 20].
+  - PascalCase for Vue components [18].
+  - kebab-case for all service, utility, and route files [18].
+  - camelCase for functions and variables [18].
+  - UPPER_SNAKE_CASE for constants [18].
+- **Exports:** Named exports for services/utilities; Default exports for Vue components [18].
 
 ###### Backend & TypeScript Standards
 
-- **Return Types:** Always use **explicit return types** for all TypeScript functions [16, 17].
-- **Strict Typing:** Define strict interfaces for message passing between the frontend and server [16].
-- **Pure Functions:** Use the `function` keyword for pure functions to enhance readability [12, 21].
-- **Error Handling:** Use guard clauses for validation; avoid large try/catch blocks unless translating errors for the user [7, 16].
+- **Return Types:** Always use **explicit return types** for all TypeScript functions [18].
+- **Strict Typing:** Define strict interfaces in `packages/shared/src/index.ts` for all message passing [18, 20].
+- **Pure Functions:** Use the `function` keyword for pure functions to enhance readability [23].
+- **Error Handling:** Use guard clauses for validation; avoid large try/catch blocks unless translating errors for the user [23].
 
-###### Workflow & Formatting Standards
+###### Workflow & Formatting
 
-- **Prettier Rules:** Single quotes, **no semicolons**, and 100-character print width [6, 22].
-- **Documentation:** Use JSDoc for services. Only include comments for complex logic; ignore the obvious [22-24].
-- **Linter:** Cascade must automatically fix lint errors it generates using existing ESLint rules [22].
+- **Prettier Rules:** Single quotes, **no semicolons**, and 100-character print width (defined in `.prettierrc.json`) [23, 24].
+- **Documentation:** Use JSDoc for services. Only include comments for complex logic; ignore the obvious [23].
+- **Linter:** Cascade must automatically fix lint errors it generates using existing ESLint rules [23].
 
 ###### Git Usage
 
-Follow these commit message prefixes (lowercase messages) [22, 24]:
+Follow these commit message prefixes (lowercase messages) [25]:
 
 - `feat:` New features
 - `fix:` Bug fixes
@@ -71,5 +69,5 @@ Follow these commit message prefixes (lowercase messages) [22, 24]:
 
 ###### Maintenance Principles
 
-- **Keep it Concise:** Only add preferences if Cascade consistently gets a pattern wrong. Concise context reduces hallucinations [25-27].
-- **Iterative:** Update this file constantly as you discover new problems or refine your tech stack [26-28].
+- **Keep it Concise:** Only add preferences if Cascade consistently gets a pattern wrong. Concise context reduces hallucinations [25].
+- **Iterative:** Update this file constantly as you discover new problems or refine your tech stack [25].

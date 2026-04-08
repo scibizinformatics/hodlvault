@@ -40,13 +40,13 @@ export interface ApiResponse<T = any> {
 }
 
 // Utilities
-export function serializeForWc(obj: any): any {
+export function serializeForWc(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj
   if (typeof obj === 'bigint') return obj.toString()
   if (obj instanceof Uint8Array) return binToHex(obj)
   if (Array.isArray(obj)) return obj.map(serializeForWc)
-  if (typeof obj === 'object') {
-    const out: any = {}
+  if (typeof obj === 'object' && obj !== null) {
+    const out: Record<string, unknown> = {}
     for (const k of Object.keys(obj)) out[k] = serializeForWc(obj[k])
     return out
   }

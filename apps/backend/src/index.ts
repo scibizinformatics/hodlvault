@@ -7,7 +7,8 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import dotenv from 'dotenv'
-import { ORACLE_PUBKEY } from '@hodlvault/shared'
+// import { ORACLE_PUBKEY } from '@hodlvault/shared'
+const ORACLE_PUBKEY = '02d09db08af1ff4e8453919cc866a4be427d7bfe18f2c05e5444c196fcf6fd2818'
 
 // Load environment variables
 dotenv.config()

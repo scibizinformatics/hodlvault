@@ -1,18 +1,15 @@
 {
-  "name": "hodl-vault-app",
+  "name": "hodl-vault-frontend",
   "version": "4.0.1",
-  "description": "Intern System Project",
-  "productName": "BCH Hodl Vault",
-  "author": "Edo_Tensei <baliteeddmark@gmail.com>",
+  "description": "BCH HodlVault Frontend",
   "type": "module",
   "private": true,
   "scripts": {
-    "lint": "eslint -c ./eslint.config.js \"./src*/**/*.{js,cjs,mjs,vue}\"",
-    "format": "prettier --write \"**/*.{js,vue,scss,html,md,json}\" --ignore-path .gitignore",
-    "test": "echo \"No test specified\" && exit 0",
     "dev": "quasar dev",
     "build": "quasar build",
-    "postinstall": "quasar prepare"
+    "lint": "eslint -c ./eslint.config.js \"./src*/**/*.{js,cjs,mjs,vue}\"",
+    "format": "prettier --write \"**/*.{js,vue,scss,html,md,json}\" --ignore-path .gitignore",
+    "test": "echo \"No test specified\" && exit 0"
   },
   "dependencies": {
     "@bitauth/libauth": "^3.1.0-next.8",
@@ -22,10 +19,7 @@
     "@walletconnect/utils": "^2.23.6",
     "cashc": "^0.11.5",
     "cashscript": "^0.11.5",
-    "express": "^5.2.1",
     "jsqr": "^1.4.0",
-    "mongoose": "^9.4.1",
-    "nodemon": "^3.1.14",
     "qrcode.vue": "^3.8.0",
     "quasar": "^2.16.0",
     "vue": "^3.5.22",
@@ -44,11 +38,5 @@
     "prettier": "^3.3.3",
     "vite-plugin-checker": "^0.11.0",
     "vue-eslint-parser": "^10.2.0"
-  },
-  "engines": {
-    "node": "^28 || ^26 || ^24 || ^22 || ^20",
-    "npm": ">= 6.13.4",
-    "yarn": ">= 1.21.1",
-    "pnpm": ">= 10.0.0"
   }
 }

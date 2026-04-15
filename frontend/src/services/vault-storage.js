@@ -1,12 +1,40 @@
 /**
  * Vault Storage Service
- * Manages multiple vaults per wallet with localStorage persistence
+ * Manages multiple vaults per wallet with backend API and localStorage fallback
  */
+
+import { vaultApi } from './api.service.js'
 
 class VaultStorageService {
   constructor() {
     this.storageKey = 'hodl-vault-all-vaults'
     this.legacyKey = 'hodl-vault-active-vault'
+    this.useBackend = true // Toggle backend usage
+    this.backendAvailable = false // Will be checked at runtime
+  }
+
+  /**
+   * Check if backend is available
+   * @returns {Promise<boolean>}
+   */
+  async checkBackendAvailability() {
+    try {
+      await vaultApi.getVaultsByWallet('test', { timeout: 3000 })
+      this.backendAvailable = true
+      return true
+    } catch {
+      this.backendAvailable = false
+      console.warn('Backend not available, using localStorage fallback')
+      return false
+    }
+  }
+
+  /**
+   * Determine if we should use backend or localStorage
+   * @returns {boolean}
+   */
+  shouldUseBackend() {
+    return this.useBackend && this.backendAvailable
   }
 
   /**
@@ -41,7 +69,32 @@ class VaultStorageService {
    * @param {string} [vaultData.vaultSalt] - Unique salt for contract address
    * @param {string} [vaultData.name] - Vault name
    */
-  saveVault(vaultData) {
+  async saveVault(vaultData) {
+    // Try backend first if available
+    if (this.shouldUseBackend()) {
+      try {
+        const result = await vaultApi.createVault(vaultData)
+        console.log('Vault saved to backend:', result.vault)
+        // Also save to localStorage as backup
+        this.saveVaultLocal(vaultData)
+        return result.vault
+      } catch (error) {
+        console.warn('Failed to save to backend, falling back to localStorage:', error)
+        // Fall back to localStorage
+        return this.saveVaultLocal(vaultData)
+      }
+    }
+
+    // Use localStorage
+    return this.saveVaultLocal(vaultData)
+  }
+
+  /**
+   * Save vault to localStorage only
+   * @param {Object} vaultData - Vault information
+   * @returns {Object} Saved vault
+   */
+  saveVaultLocal(vaultData) {
     if (typeof localStorage === 'undefined') return
 
     try {
@@ -51,32 +104,30 @@ class VaultStorageService {
       const vaultId = vaultData.id || this.generateVaultId()
       const vaultSalt = vaultData.vaultSalt || this.generateVaultSalt()
 
-      // Check if vault with same contract address already exists (should not happen with salt)
+      // Check if vault with same contract address already exists
       const existingIndex = vaults.findIndex((v) => v.contractAddress === vaultData.contractAddress)
 
       const vault = {
         ...vaultData,
-        id: vaultId, // Use unique ID instead of contract address
-        vaultSalt, // Store the salt for contract recreation
+        id: vaultId,
+        vaultSalt,
         createdAt: vaultData.createdAt || Date.now(),
         updatedAt: Date.now(),
       }
 
       if (existingIndex >= 0) {
-        // This should not happen with salt, but handle gracefully
         console.warn('Vault with same contract address already exists, updating...')
         vaults[existingIndex] = vault
       } else {
-        // Add new vault
         vaults.push(vault)
       }
 
       localStorage.setItem(this.storageKey, JSON.stringify(vaults))
-      console.log('Vault saved:', vault)
+      console.log('Vault saved to localStorage:', vault)
 
       return vault
     } catch (error) {
-      console.error('Failed to save vault:', error)
+      console.error('Failed to save vault to localStorage:', error)
       throw error
     }
   }
@@ -85,7 +136,27 @@ class VaultStorageService {
    * Get all vaults from storage
    * @returns {Array} Array of vault objects
    */
-  getAllVaults() {
+  async getAllVaults() {
+    // Try backend first if available
+    if (this.shouldUseBackend()) {
+      try {
+        const result = await vaultApi.getVaults()
+        console.log('Vaults loaded from backend:', result.vaults?.length || 0)
+        return result.vaults || []
+      } catch (error) {
+        console.warn('Failed to load from backend, using localStorage:', error)
+      }
+    }
+
+    // Fallback to localStorage
+    return this.getAllVaultsLocal()
+  }
+
+  /**
+   * Get all vaults from localStorage only
+   * @returns {Array} Array of vault objects
+   */
+  getAllVaultsLocal() {
     if (typeof localStorage === 'undefined') return []
 
     try {
@@ -95,7 +166,7 @@ class VaultStorageService {
       const stored = localStorage.getItem(this.storageKey)
       return stored ? JSON.parse(stored) : []
     } catch (error) {
-      console.error('Failed to get vaults:', error)
+      console.error('Failed to get vaults from localStorage:', error)
       return []
     }
   }
@@ -123,10 +194,22 @@ class VaultStorageService {
    * @param {string} walletAddress - Wallet address to filter by
    * @returns {Array} Array of vault objects for the wallet
    */
-  getVaultsByWallet(walletAddress) {
+  async getVaultsByWallet(walletAddress) {
     if (!walletAddress) return []
 
-    const allVaults = this.getAllVaults()
+    // Try backend first if available
+    if (this.shouldUseBackend()) {
+      try {
+        const result = await vaultApi.getVaultsByWallet(walletAddress)
+        console.log(`Vaults loaded from backend for ${walletAddress}:`, result.vaults?.length || 0)
+        return result.vaults || []
+      } catch (error) {
+        console.warn('Failed to load from backend, using localStorage:', error)
+      }
+    }
+
+    // Fallback to localStorage
+    const allVaults = this.getAllVaultsLocal()
     return allVaults.filter((vault) => vault.walletAddress === walletAddress)
   }
 
@@ -159,8 +242,19 @@ class VaultStorageService {
    * @param {string} contractAddress - Contract address of the vault
    * @param {number} balance - New balance in satoshis
    */
-  updateVaultBalance(contractAddress, balance) {
-    const vaults = this.getAllVaults()
+  async updateVaultBalance(contractAddress, balance) {
+    // Try backend first if available
+    if (this.shouldUseBackend()) {
+      try {
+        await vaultApi.updateVaultBalance(contractAddress, balance)
+        console.log('Vault balance updated in backend:', { contractAddress, balance })
+      } catch (error) {
+        console.warn('Failed to update backend, updating localStorage only:', error)
+      }
+    }
+
+    // Always update localStorage as backup
+    const vaults = this.getAllVaultsLocal()
     const vaultIndex = vaults.findIndex((v) => v.contractAddress === contractAddress)
 
     if (vaultIndex >= 0) {
@@ -168,20 +262,73 @@ class VaultStorageService {
       vaults[vaultIndex].updatedAt = Date.now()
 
       localStorage.setItem(this.storageKey, JSON.stringify(vaults))
-      console.log('Vault balance updated:', { contractAddress, balance })
+      console.log('Vault balance updated in localStorage:', { contractAddress, balance })
     }
   }
 
   /**
    * Delete a vault
    * @param {string} contractAddress - Contract address of the vault to delete
+   * @param {string} vaultId - Vault ID (required for backend deletion)
    */
-  deleteVault(contractAddress) {
-    const vaults = this.getAllVaults()
+  async deleteVault(contractAddress, vaultId) {
+    // Try backend first if available and vaultId provided
+    if (this.shouldUseBackend() && vaultId) {
+      try {
+        await vaultApi.deleteVault(vaultId)
+        console.log('Vault deleted from backend:', contractAddress)
+      } catch (error) {
+        console.warn('Failed to delete from backend:', error)
+      }
+    }
+
+    // Always delete from localStorage
+    const vaults = this.getAllVaultsLocal()
     const filteredVaults = vaults.filter((v) => v.contractAddress !== contractAddress)
 
     localStorage.setItem(this.storageKey, JSON.stringify(filteredVaults))
-    console.log('Vault deleted:', contractAddress)
+    console.log('Vault deleted from localStorage:', contractAddress)
+  }
+
+  /**
+   * Sync local vaults with backend
+   * @param {string} walletAddress - Wallet address to sync
+   */
+  async syncVaultsWithBackend(walletAddress) {
+    if (!this.shouldUseBackend()) {
+      console.log('Backend not available, skipping sync')
+      return
+    }
+
+    try {
+      // Get vaults from backend
+      const backendResult = await vaultApi.getVaultsByWallet(walletAddress)
+      const backendVaults = backendResult.vaults || []
+
+      // Get vaults from localStorage
+      const localVaults = this.getVaultsByWallet(walletAddress)
+
+      // Find vaults that exist locally but not in backend
+      const vaultsToMigrate = localVaults.filter((localVault) => {
+        return !backendVaults.some(
+          (backendVault) => backendVault.contractAddress === localVault.contractAddress,
+        )
+      })
+
+      // Migrate local vaults to backend
+      for (const vault of vaultsToMigrate) {
+        try {
+          await vaultApi.createVault(vault)
+          console.log('Migrated vault to backend:', vault.id)
+        } catch (error) {
+          console.error('Failed to migrate vault:', vault.id, error)
+        }
+      }
+
+      console.log(`Sync complete: Migrated ${vaultsToMigrate.length} vaults to backend`)
+    } catch (error) {
+      console.error('Failed to sync vaults with backend:', error)
+    }
   }
 
   /**

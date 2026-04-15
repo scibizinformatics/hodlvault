@@ -84,11 +84,53 @@ const mutations = {
 }
 
 const actions = {
-  loginUser({ commit }, walletData) {
+  loginUser({ commit, dispatch }, walletData) {
     commit('SET_WALLET', walletData)
+    // Sync vaults with backend after wallet connection
+    dispatch('syncWithBackend')
   },
   clearWallet({ commit }) {
     commit('CLEAR_WALLET')
+  },
+
+  /**
+   * Sync vaults and preferences with backend
+   * Called automatically after wallet connection
+   */
+  async syncWithBackend({ state }) {
+    if (!state.address) return
+
+    try {
+      // Import vaultStorage dynamically to avoid circular dependencies
+      const { vaultStorage } = await import('../../services/vault-storage.js')
+
+      // Check backend availability
+      await vaultStorage.checkBackendAvailability()
+
+      if (vaultStorage.shouldUseBackend()) {
+        // Sync vaults with backend
+        await vaultStorage.syncVaultsWithBackend(state.address)
+        console.log('Wallet synced with backend successfully')
+      }
+    } catch (error) {
+      console.warn('Failed to sync with backend:', error)
+      // Continue with localStorage fallback - user can still use the app
+    }
+  },
+
+  /**
+   * Check backend health manually
+   * Can be called from UI to verify connection
+   */
+  async checkBackendHealth() {
+    try {
+      const { vaultStorage } = await import('../../services/vault-storage.js')
+      const isAvailable = await vaultStorage.checkBackendAvailability()
+      return isAvailable
+    } catch (error) {
+      console.error('Backend health check failed:', error)
+      return false
+    }
   },
 }
 

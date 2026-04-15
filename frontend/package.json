@@ -4,6 +4,9 @@
   "description": "BCH HodlVault Frontend",
   "type": "module",
   "private": true,
+  "imports": {
+    "#q-app/wrappers": "./node_modules/@quasar/app-vite/exports/wrappers/wrappers.js"
+  },
   "scripts": {
     "dev": "quasar dev",
     "build": "quasar build",
@@ -17,6 +20,7 @@
     "@walletconnect/modal": "^2.7.0",
     "@walletconnect/sign-client": "^2.23.6",
     "@walletconnect/utils": "^2.23.6",
+    "axios": "^1.15.0",
     "cashc": "^0.11.5",
     "cashscript": "^0.11.5",
     "jsqr": "^1.4.0",
@@ -26,5 +30,7 @@
     "vue-router": "^5.0.0",
     "vuex": "^4.1.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@quasar/app-vite": "2.0.0"
+  }
 }

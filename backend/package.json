@@ -2,20 +2,17 @@
   "name": "hodl-vault-backend",
   "version": "1.0.0",
   "description": "BCH HodlVault Backend API",
+  "main": "src/index.js",
   "type": "module",
-  "main": "backend/src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "test": "echo \"No test specified\" && exit 0"
+    "dev": "nodemon src/index.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "dotenv": "^16.0.0",
-    "express": "^5.2.1",
-    "mongoose": "^9.4.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.0"
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "mongoose": "^8.18.3",
+    "nodemon": "^3.1.10"
   }
 }

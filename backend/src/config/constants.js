@@ -1,1 +1,1 @@
-export const DB_NAME = 'hodl-vault-app'
+export const DB_NAME = "intro-to-backend"

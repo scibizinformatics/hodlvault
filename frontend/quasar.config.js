@@ -61,7 +61,19 @@ export default defineConfig((/* ctx */) => {
       // polyfillModulePreload: true,
       // distDir
 
-      // extendViteConf (viteConf) {},
+      extendViteConf(viteConf) {
+        // Disable dependency optimization to fix 504 errors
+        viteConf.optimizeDeps = {
+          disabled: true,
+        }
+        // Increase timeout for large dependencies
+        viteConf.server = {
+          ...viteConf.server,
+          hmr: {
+            timeout: 30000,
+          },
+        }
+      },
       // viteVuePluginOptions: {},
 
       vitePlugins: [

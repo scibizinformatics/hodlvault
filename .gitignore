@@ -40,13 +40,13 @@ pnpm-lock.yaml
 /src-capacitor/node_modules
 
 # Environment files
-# .env
-# .env.local
-# .env.development.local
-# .env.test.local
-# .env.production.local
-# .env.test
-# .env.production
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.test
+.env.production
 
 # Logs
 logs
@@ -117,9 +117,9 @@ build/Release
 # Documentation
 docs/
 
-# # Postman
-# postman/
-# .postman/
+# Postman
+postman/
+.postman/
 
 # End of gitignore
 

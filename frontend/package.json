@@ -31,6 +31,11 @@
     "vuex": "^4.1.0"
   },
   "devDependencies": {
-    "@quasar/app-vite": "2.0.0"
+    "@quasar/app-vite": "2.0.0",
+    "buffer": "^6.0.3",
+    "events": "^3.3.0",
+    "stream-browserify": "^3.0.0",
+    "util": "^0.12.5",
+    "vite-plugin-node-polyfills": "^0.26.0"
   }
 }

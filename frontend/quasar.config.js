@@ -62,16 +62,49 @@ export default defineConfig((/* ctx */) => {
       // distDir
 
       extendViteConf(viteConf) {
-        // Disable dependency optimization to fix 504 errors
+        // Fix Vite 5.1+ - use noDiscovery instead of disabled
         viteConf.optimizeDeps = {
-          disabled: true,
+          noDiscovery: true,
+          include: [
+            'events',
+            'buffer',
+            'util',
+            'stream-browserify',
+            '@walletconnect/sign-client',
+            '@walletconnect/modal',
+          ],
+          esbuildOptions: {
+            define: {
+              global: 'globalThis',
+            },
+          },
         }
+
         // Increase timeout for large dependencies
         viteConf.server = {
           ...viteConf.server,
           hmr: {
             timeout: 30000,
           },
+        }
+
+        // Polyfill Node.js modules for WalletConnect
+        viteConf.resolve = {
+          ...viteConf.resolve,
+          alias: {
+            ...viteConf.resolve?.alias,
+            events: 'events/events.js',
+            buffer: 'buffer/index.js',
+            util: 'util/util.js',
+            stream: 'stream-browserify/index.js',
+          },
+        }
+
+        // Define global for browser compatibility
+        viteConf.define = {
+          ...viteConf.define,
+          global: 'globalThis',
+          'process.env': {},
         }
       },
       // viteVuePluginOptions: {},

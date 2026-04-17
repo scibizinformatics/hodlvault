@@ -227,7 +227,6 @@ import {
   calculateContractAddress,
   initializeHodlVaultContract,
   getAddressBalance,
-  depositToVault,
 } from 'src/services/blockchain'
 import { fetchOraclePrice, ORACLE_PUBKEY } from 'src/services/oracle'
 import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
@@ -582,53 +581,13 @@ export default defineComponent({
         setTimeout(() => {
           this.$router.push('/my-vaults')
         }, 2000)
-
-        // Immediately request a deposit from the connected wallet using WalletConnect
-        if (typeof wc.request === 'function') {
-          this.depositing = true
-          try {
-            const depositPromise = depositToVault(
-              contractAddress,
-              this.form.amount,
-              (method, params) => wc.request(method, params),
-            )
-            const depositResult = await Promise.race([
-              depositPromise,
-              new Promise((resolve) => setTimeout(() => resolve({ txid: null, raw: null }), 20000)),
-            ])
-            const txid = depositResult && depositResult.txid
-            this.$q.notify({
-              type: 'positive',
-              message: txid
-                ? `Deposit transaction submitted. TX: ${txid}`
-                : 'Deposit submitted in wallet. Waiting for network confirmation...',
-              icon: 'check_circle',
-            })
-          } catch (depositErr) {
-            console.error('Initial deposit via WalletConnect failed:', depositErr)
-            this.$q.notify({
-              type: 'negative',
-              message: `RAW ERROR: ${JSON.stringify(depositErr, null, 2)}`,
-              timeout: 15000,
-              html: true,
-            })
-          } finally {
-            this.depositing = false
-          }
-        } else {
-          this.$q.notify({
-            type: 'warning',
-            message:
-              'WalletConnect request function is not available; please send funds manually to the vault address.',
-          })
-        }
       } catch (err) {
         console.error('Vault creation failed:', err)
+        const errorMessage = err?.message || err?.toString() || 'An unexpected error occurred'
         this.$q.notify({
           type: 'negative',
-          message: `RAW ERROR: ${JSON.stringify(err, null, 2)}`,
-          timeout: 15000,
-          html: true,
+          message: `Failed to create vault: ${errorMessage}`,
+          timeout: 10000,
         })
       } finally {
         this.locking = false
@@ -653,11 +612,11 @@ export default defineComponent({
         })
       } catch (err) {
         console.error('Identity verification failed:', err)
+        const errorMessage = err?.message || err?.toString() || 'Verification failed'
         this.$q.notify({
           type: 'negative',
-          message: `RAW ERROR: ${JSON.stringify(err, null, 2)}`,
-          timeout: 15000,
-          html: true,
+          message: `Identity verification failed: ${errorMessage}`,
+          timeout: 10000,
         })
       } finally {
         this.verifyingIdentity = false
@@ -768,6 +727,19 @@ export default defineComponent({
         this.enableAutoWithdrawal = false
       } finally {
         this.preSigning = false
+      }
+    },
+
+    /**
+     * Refresh vault balance from blockchain
+     */
+    async refreshVaultBalance() {
+      if (!this.vault || !this.vault.contractAddress) return
+      try {
+        const balance = await getAddressBalance(this.vault.contractAddress)
+        this.vault.balance = Number(balance)
+      } catch (err) {
+        console.error('Failed to refresh vault balance:', err)
       }
     },
   },

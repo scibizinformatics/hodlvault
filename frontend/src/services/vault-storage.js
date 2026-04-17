@@ -70,22 +70,24 @@ class VaultStorageService {
    * @param {string} [vaultData.name] - Vault name
    */
   async saveVault(vaultData) {
-    // Try backend first if available
-    if (this.shouldUseBackend()) {
+    // Always try backend first if enabled, fallback on error
+    if (this.useBackend) {
       try {
         const result = await vaultApi.createVault(vaultData)
         console.log('Vault saved to backend:', result.vault)
+        this.backendAvailable = true
         // Also save to localStorage as backup
         this.saveVaultLocal(vaultData)
         return result.vault
       } catch (error) {
         console.warn('Failed to save to backend, falling back to localStorage:', error)
+        this.backendAvailable = false
         // Fall back to localStorage
         return this.saveVaultLocal(vaultData)
       }
     }
 
-    // Use localStorage
+    // Use localStorage only
     return this.saveVaultLocal(vaultData)
   }
 
@@ -133,22 +135,13 @@ class VaultStorageService {
   }
 
   /**
-   * Get all vaults from storage
+   * Get all vaults from storage (synchronous - uses localStorage)
+   * Note: Backend sync happens during save, load uses localStorage for consistency
    * @returns {Array} Array of vault objects
    */
-  async getAllVaults() {
-    // Try backend first if available
-    if (this.shouldUseBackend()) {
-      try {
-        const result = await vaultApi.getVaults()
-        console.log('Vaults loaded from backend:', result.vaults?.length || 0)
-        return result.vaults || []
-      } catch (error) {
-        console.warn('Failed to load from backend, using localStorage:', error)
-      }
-    }
-
-    // Fallback to localStorage
+  getAllVaults() {
+    // Always use localStorage for synchronous access
+    // Backend sync is handled during save operations
     return this.getAllVaultsLocal()
   }
 

@@ -98,38 +98,42 @@ const actions = {
    * Called automatically after wallet connection
    */
   async syncWithBackend({ state }) {
-    if (!state.address) return
+    if (!state.address) {
+      console.log('No wallet address, skipping backend sync')
+      return
+    }
 
     try {
       // Import vaultStorage dynamically to avoid circular dependencies
-      const { vaultStorage } = await import('../../services/vault-storage.js')
+      const { vaultStorage } = await import('src/services/vault-storage')
 
-      // Check backend availability
-      await vaultStorage.checkBackendAvailability()
+      // Check if backend is available
+      const isAvailable = await vaultStorage.checkBackendAvailability()
+      console.log('Backend availability check:', isAvailable)
 
-      if (vaultStorage.shouldUseBackend()) {
+      if (isAvailable) {
         // Sync vaults with backend
         await vaultStorage.syncVaultsWithBackend(state.address)
-        console.log('Wallet synced with backend successfully')
+        console.log('Vault sync with backend completed')
+      } else {
+        console.warn('Backend not available, operating in localStorage-only mode')
       }
     } catch (error) {
-      console.warn('Failed to sync with backend:', error)
-      // Continue with localStorage fallback - user can still use the app
+      console.error('Backend sync failed:', error)
     }
   },
 
   /**
-   * Check backend health manually
-   * Can be called from UI to verify connection
+   * Check backend health (can be called manually)
    */
   async checkBackendHealth() {
     try {
-      const { vaultStorage } = await import('../../services/vault-storage.js')
+      const { vaultStorage } = await import('src/services/vault-storage')
       const isAvailable = await vaultStorage.checkBackendAvailability()
-      return isAvailable
+      return { available: isAvailable }
     } catch (error) {
       console.error('Backend health check failed:', error)
-      return false
+      return { available: false, error: error.message }
     }
   },
 }

@@ -82,25 +82,19 @@ export async function fetchOraclePrice() {
       note: 'Price from oracle metrics, signature placeholder',
     }
   } catch (error) {
-    console.error('Failed to fetch oracle price:', error)
+    console.error('Oracle price fetch failed:', error)
 
-    // Provide fallback data when oracle is unavailable
+    // Determine specific error message
+    let errorMessage = 'Unable to fetch BCH price from Oracle.'
     if (error.name === 'AbortError') {
-      console.warn('Oracle request timed out, using fallback')
-    } else if (error.message.includes('Failed to fetch')) {
-      console.warn('Oracle server not reachable, using fallback')
+      errorMessage = 'Oracle request timed out. Please check your connection and try again.'
+    } else if (error.message?.includes('Failed to fetch')) {
+      errorMessage = 'Cannot reach Oracle server. Please check your internet connection.'
+    } else if (error.message?.includes('Oracle API returned status')) {
+      errorMessage = `Oracle API error: ${error.message}`
     }
 
-    // Return fallback data to prevent system from breaking
-    return {
-      price: 350.0,
-      message_hex: '0000000000007530',
-      signature_hex:
-        '3044022044f7d0438553f6fb52be62a94e6d676c6d47536f6a101f51f76257931db14030022009073ba73e721684db25397e73d6c210',
-      oracle_pubkey_hex: ORACLE_PUBKEY,
-      status: 'fallback',
-      source: 'fallback',
-      timestamp: Date.now(),
-    }
+    // Throw proper error - NEVER use fake price data in DeFi
+    throw new Error(`${errorMessage} Vault creation disabled until price data is available.`)
   }
 }

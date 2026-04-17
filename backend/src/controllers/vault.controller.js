@@ -389,10 +389,10 @@ export const checkDuplicateVault = async (req, res) => {
  */
 export const updateVaultBalance = async (req, res) => {
   try {
-    const { contractAddress } = req.params
+    const { address } = req.params
     const { balance } = req.body
 
-    if (!contractAddress || balance === undefined) {
+    if (!address || balance === undefined) {
       return res.status(400).json({
         message: 'Contract address and balance are required',
       })
@@ -407,7 +407,7 @@ export const updateVaultBalance = async (req, res) => {
     }
 
     const vault = await Vault.findOne({
-      contractAddress: contractAddress.toLowerCase(),
+      contractAddress: address.toLowerCase(),
       walletAddress: walletAddress.toLowerCase(),
     })
 

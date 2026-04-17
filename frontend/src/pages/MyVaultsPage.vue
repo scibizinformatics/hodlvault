@@ -257,8 +257,8 @@ export default defineComponent({
                 const { getAddressBalance } = await import('src/services/blockchain')
                 const currentBalance = await getAddressBalance(vault.contractAddress)
 
-                // Update vault balance in storage
-                vaultStorage.updateVaultBalance(vault.contractAddress, currentBalance)
+                // Update vault balance in storage (convert BigInt to Number for JSON serialization)
+                vaultStorage.updateVaultBalance(vault.contractAddress, Number(currentBalance))
 
                 return {
                   ...vault,
@@ -393,8 +393,8 @@ export default defineComponent({
               const { getAddressBalance } = await import('src/services/blockchain')
               const currentBalance = await getAddressBalance(vault.contractAddress)
 
-              // Update vault balance in storage
-              vaultStorage.updateVaultBalance(vault.contractAddress, currentBalance)
+              // Update vault balance in storage (convert BigInt to Number for JSON serialization)
+              vaultStorage.updateVaultBalance(vault.contractAddress, Number(currentBalance))
 
               return {
                 ...vault,

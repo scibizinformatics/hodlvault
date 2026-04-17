@@ -236,13 +236,22 @@ class VaultStorageService {
    * @param {number} balance - New balance in satoshis
    */
   async updateVaultBalance(contractAddress, balance) {
-    // Try backend first if available
-    if (this.shouldUseBackend()) {
+    // Ensure balance is a Number (not BigInt) for JSON serialization
+    const balanceNumber = Number(balance)
+
+    // Try backend first if enabled
+    if (this.useBackend) {
       try {
-        await vaultApi.updateVaultBalance(contractAddress, balance)
-        console.log('Vault balance updated in backend:', { contractAddress, balance })
+        await vaultApi.updateVaultBalance(contractAddress, balanceNumber)
+        this.backendAvailable = true
+        console.log('Vault balance updated in backend:', {
+          contractAddress,
+          balance: balanceNumber,
+        })
       } catch (error) {
-        console.warn('Failed to update backend, updating localStorage only:', error)
+        console.warn('Failed to update balance in backend:', error.message || error)
+        this.backendAvailable = false
+        // Continue to update localStorage even if backend fails
       }
     }
 
@@ -251,11 +260,14 @@ class VaultStorageService {
     const vaultIndex = vaults.findIndex((v) => v.contractAddress === contractAddress)
 
     if (vaultIndex >= 0) {
-      vaults[vaultIndex].balance = Number(balance)
+      vaults[vaultIndex].balance = balanceNumber
       vaults[vaultIndex].updatedAt = Date.now()
 
       localStorage.setItem(this.storageKey, JSON.stringify(vaults))
-      console.log('Vault balance updated in localStorage:', { contractAddress, balance })
+      console.log('Vault balance updated in localStorage:', {
+        contractAddress,
+        balance: balanceNumber,
+      })
     }
   }
 

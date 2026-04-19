@@ -70,6 +70,17 @@ class VaultStorageService {
    * @param {string} [vaultData.name] - Vault name
    */
   async saveVault(vaultData) {
+    // Debug: Log what data we're trying to save
+    console.log('🔍 saveVault called with:', {
+      contractAddress: vaultData.contractAddress,
+      walletAddress: vaultData.walletAddress,
+      priceTarget: vaultData.priceTarget,
+      hasOwnerPkhHex: !!vaultData.ownerPkhHex,
+      hasOraclePkHex: !!vaultData.oraclePkHex,
+      hasOriginalFundingAddress: !!vaultData.originalFundingAddress,
+      hasVaultSalt: !!vaultData.vaultSalt,
+    })
+
     // Always try backend first if enabled, fallback on error
     if (this.useBackend) {
       try {
@@ -80,9 +91,14 @@ class VaultStorageService {
         this.saveVaultLocal(vaultData)
         return result.vault
       } catch (error) {
-        console.warn('Failed to save to backend, falling back to localStorage:', error)
+        console.error('❌ Backend vault save failed:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+        })
         this.backendAvailable = false
-        // Fall back to localStorage
+        // Fall back to localStorage but now with visibility
+        console.warn('⚠️  Falling back to localStorage. Vault NOT synced to MongoDB.')
         return this.saveVaultLocal(vaultData)
       }
     }

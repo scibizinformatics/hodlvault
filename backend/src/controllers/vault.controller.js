@@ -18,6 +18,18 @@ export const createVault = async (req, res) => {
       name,
     } = req.body
 
+    // Debug logging to diagnose vault save failures
+    console.log('🔍 createVault called:', {
+      bodyWalletAddress: walletAddress,
+      headerWalletAddress: req.walletAddress,
+      contractAddress,
+      priceTarget,
+      hasOwnerPkhHex: !!ownerPkhHex,
+      hasOraclePkHex: !!oraclePkHex,
+      hasOriginalFundingAddress: !!originalFundingAddress,
+      hasVaultSalt: !!vaultSalt,
+    })
+
     // Validate required fields
     const requiredFields = [
       'walletAddress',
@@ -31,6 +43,7 @@ export const createVault = async (req, res) => {
 
     const missingFields = requiredFields.filter((field) => !req.body[field])
     if (missingFields.length > 0) {
+      console.log('❌ createVault validation failed - missing fields:', missingFields)
       return res.status(400).json({
         message: 'Missing required fields',
         missingFields,

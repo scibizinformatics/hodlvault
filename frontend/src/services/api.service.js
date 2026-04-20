@@ -113,13 +113,13 @@ export const vaultApi = {
   /**
    * Check for duplicate vault parameters
    * @param {string} walletAddress - Wallet address
-   * @param {number} priceTarget - Price target
+   * @param {number} priceTargetCents - Price target in cents
    * @returns {Promise<Object>} Duplicate check result
    */
-  async checkDuplicate(walletAddress, priceTarget) {
+  async checkDuplicate(walletAddress, priceTargetCents) {
     const response = await apiClient.post('/vaults/check-duplicate', {
       walletAddress,
-      priceTarget,
+      priceTargetCents,
     })
     return response.data
   },
@@ -157,6 +157,16 @@ export const vaultApi = {
     const response = await apiClient.get(`/vaults/wallet/${walletAddress}`, {
       params,
     })
+    return response.data
+  },
+
+  /**
+   * Get vault by contract address
+   * @param {string} contractAddress - Contract address
+   * @returns {Promise<Object>} Vault data
+   */
+  async getVaultByContractAddress(contractAddress) {
+    const response = await apiClient.get(`/vaults/contract/${contractAddress}`)
     return response.data
   },
 }

@@ -394,6 +394,15 @@ export default defineComponent({
 
     loadSelectedVault(vaultData) {
       try {
+        // ✅ Defensive: Convert old priceTarget field to priceTargetCents if needed
+        if (!vaultData.priceTargetCents && vaultData.priceTarget) {
+          vaultData.priceTargetCents = Math.round(vaultData.priceTarget * 100)
+          console.log(
+            '🔄 VaultPage: Converted priceTarget to priceTargetCents:',
+            vaultData.priceTargetCents,
+          )
+        }
+
         // Initialize contract for the selected vault
         const contract = initializeHodlVaultContract(
           vaultData.ownerPkhHex,
@@ -493,7 +502,7 @@ export default defineComponent({
         // Check for duplicate vault with same parameters
         const existingVault = vaultStorage.checkForDuplicateVault(
           this.walletAddress,
-          this.form.priceTarget,
+          this.developerPriceTargetCents, // Use cents for duplicate check
         )
         if (existingVault) {
           this.$q.notify({

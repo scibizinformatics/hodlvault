@@ -9,7 +9,7 @@ export const createVault = async (req, res) => {
     const {
       walletAddress,
       contractAddress,
-      priceTarget,
+      priceTargetCents,
       balance,
       ownerPkhHex,
       oraclePkHex,
@@ -23,7 +23,7 @@ export const createVault = async (req, res) => {
       bodyWalletAddress: walletAddress,
       headerWalletAddress: req.walletAddress,
       contractAddress,
-      priceTarget,
+      priceTargetCents,
       hasOwnerPkhHex: !!ownerPkhHex,
       hasOraclePkHex: !!oraclePkHex,
       hasOriginalFundingAddress: !!originalFundingAddress,
@@ -34,7 +34,7 @@ export const createVault = async (req, res) => {
     const requiredFields = [
       'walletAddress',
       'contractAddress',
-      'priceTarget',
+      'priceTargetCents',
       'ownerPkhHex',
       'oraclePkHex',
       'originalFundingAddress',
@@ -50,30 +50,49 @@ export const createVault = async (req, res) => {
       })
     }
 
-    // Check if vault with same contract address already exists
-    const existingVault = await Vault.findOne({ contractAddress: contractAddress.toLowerCase() })
+    // Check for duplicate by contract address
+    const existingVault = await Vault.findOne({
+      contractAddress: contractAddress.toLowerCase(),
+    })
+
     if (existingVault) {
-      return res.status(400).json({
-        message: 'Vault with this contract address already exists',
-        existingVaultId: existingVault._id,
-      })
-    }
+      // Check if same wallet owner - allow update
+      if (existingVault.walletAddress.toLowerCase() === walletAddress.toLowerCase()) {
+        console.log('📝 Updating existing vault for same owner:', contractAddress)
 
-    // Check for duplicate vault parameters (same wallet and price target)
-    const duplicateVault = await Vault.checkDuplicate(walletAddress, priceTarget)
+        existingVault.priceTargetCents = priceTargetCents
+        existingVault.balance = balance
+        existingVault.ownerPkhHex = ownerPkhHex
+        existingVault.oraclePkHex = oraclePkHex
+        existingVault.originalFundingAddress = originalFundingAddress
+        existingVault.vaultSalt = vaultSalt
+        existingVault.name = name
+        existingVault.updatedAt = new Date()
 
-    if (duplicateVault) {
-      return res.status(400).json({
-        message: 'Vault with similar parameters already exists',
-        duplicateVaultId: duplicateVault._id,
-      })
+        await existingVault.save()
+
+        return res.status(200).json({
+          message: 'Vault updated successfully',
+          vault: {
+            ...existingVault.toJSON(),
+            balanceBCH: existingVault.balanceBCH,
+            hasFunds: existingVault.hasFunds,
+          },
+        })
+      } else {
+        // Different owner - this is a real conflict
+        return res.status(400).json({
+          message: 'Vault with this contract address already exists',
+          existingVaultId: existingVault._id,
+        })
+      }
     }
 
     // Create new vault
     const vault = new Vault({
       walletAddress: walletAddress.toLowerCase(),
       contractAddress: contractAddress.toLowerCase(),
-      priceTarget: Number(priceTarget),
+      priceTargetCents: Number(priceTargetCents),
       balance: Number(balance) || 0,
       ownerPkhHex,
       oraclePkHex,
@@ -258,6 +277,61 @@ export const updateVault = async (req, res) => {
 }
 
 /**
+ * Get vault by contract address
+ */
+export const getVaultByContractAddress = async (req, res) => {
+  try {
+    const { contractAddress } = req.params
+    const walletAddress = req.walletAddress || req.body.walletAddress || req.query.walletAddress
+
+    console.log('🔍 Looking up vault by contract address:', contractAddress)
+    console.log('👛 Wallet address:', walletAddress)
+
+    if (!contractAddress) {
+      return res.status(400).json({
+        message: 'Contract address is required',
+      })
+    }
+
+    // Find vault by contract address
+    const query = {
+      contractAddress: contractAddress.toLowerCase(),
+    }
+
+    // If wallet address provided, verify ownership
+    if (walletAddress) {
+      query.walletAddress = walletAddress.toLowerCase()
+    }
+
+    const vault = await Vault.findOne(query)
+
+    if (!vault) {
+      console.log('❌ Vault not found for contract:', contractAddress)
+      return res.status(404).json({
+        message: 'Vault not found',
+      })
+    }
+
+    console.log('✅ Vault found:', vault.contractAddress)
+
+    res.status(200).json({
+      message: 'Vault retrieved successfully',
+      vault: {
+        ...vault.toJSON(),
+        balanceBCH: vault.balanceBCH,
+        hasFunds: vault.hasFunds,
+      },
+    })
+  } catch (error) {
+    console.error('Get vault by contract address error:', error)
+    res.status(500).json({
+      message: 'Internal server error',
+      error: error.message,
+    })
+  }
+}
+
+/**
  * Delete a vault
  */
 export const deleteVault = async (req, res) => {
@@ -366,15 +440,15 @@ export const getVaultsByWallet = async (req, res) => {
  */
 export const checkDuplicateVault = async (req, res) => {
   try {
-    const { walletAddress, priceTarget } = req.body
+    const { walletAddress, priceTargetCents } = req.body
 
-    if (!walletAddress || !priceTarget) {
+    if (!walletAddress || !priceTargetCents) {
       return res.status(400).json({
         message: 'Wallet address and price target are required',
       })
     }
 
-    const duplicateVault = await Vault.checkDuplicate(req.user._id, walletAddress, priceTarget)
+    const duplicateVault = await Vault.checkDuplicate(req.user._id, walletAddress, priceTargetCents)
 
     res.status(200).json({
       message: 'Duplicate check completed',
@@ -383,7 +457,7 @@ export const checkDuplicateVault = async (req, res) => {
         ? {
             id: duplicateVault._id,
             contractAddress: duplicateVault.contractAddress,
-            priceTarget: duplicateVault.priceTarget,
+            priceTargetCents: duplicateVault.priceTargetCents,
             createdAt: duplicateVault.createdAt,
           }
         : null,

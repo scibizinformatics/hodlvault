@@ -96,6 +96,7 @@ const actions = {
   /**
    * Sync vaults and preferences with backend
    * Called automatically after wallet connection
+   * Two-way sync: Backend → LocalStorage (immediate) AND LocalStorage → Backend (migration)
    */
   async syncWithBackend({ state }) {
     if (!state.address) {
@@ -112,7 +113,23 @@ const actions = {
       console.log('Backend availability check:', isAvailable)
 
       if (isAvailable) {
-        // Sync vaults with backend
+        // ✅ TWO-WAY SYNC: First fetch from backend (source of truth)
+        console.log('🔄 Fetching vaults from backend for immediate sync...')
+        const backendVaults = await vaultStorage.getVaultsByWallet(state.address)
+        console.log(`✅ Fetched ${backendVaults.length} vaults from backend`)
+
+        // Sync backend vaults to localStorage for offline access and fast loading
+        if (backendVaults.length > 0) {
+          const allLocalVaults = vaultStorage.getAllVaultsLocal()
+          const otherWalletsVaults = allLocalVaults.filter((v) => v.walletAddress !== state.address)
+
+          // Merge: Keep other wallets' vaults + update current wallet's vaults from backend
+          const mergedVaults = [...otherWalletsVaults, ...backendVaults]
+          localStorage.setItem('hodl-vault-all-vaults', JSON.stringify(mergedVaults))
+          console.log('💾 Synced backend vaults to localStorage for fast access')
+        }
+
+        // Then sync any local-only vaults to backend (migration)
         await vaultStorage.syncVaultsWithBackend(state.address)
         console.log('Vault sync with backend completed')
       } else {

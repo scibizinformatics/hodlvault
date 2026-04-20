@@ -16,7 +16,7 @@ const vaultSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
-    priceTarget: {
+    priceTargetCents: {
       type: Number,
       required: true,
       min: 0,
@@ -86,10 +86,10 @@ vaultSchema.statics.findByWalletAddress = function (walletAddress) {
 }
 
 // Static method to check for duplicate vault parameters
-vaultSchema.statics.checkDuplicate = function (walletAddress, priceTarget) {
+vaultSchema.statics.checkDuplicate = function (walletAddress, priceTargetCents) {
   return this.findOne({
     walletAddress: walletAddress.toLowerCase(),
-    priceTarget: { $gte: priceTarget - 0.01, $lte: priceTarget + 0.01 },
+    priceTargetCents: { $gte: priceTargetCents - 0.01, $lte: priceTargetCents + 0.01 },
   })
 }
 
@@ -97,7 +97,8 @@ vaultSchema.statics.checkDuplicate = function (walletAddress, priceTarget) {
 vaultSchema.methods.updateBalance = function (newBalance) {
   this.balance = Number(newBalance)
   this.updatedAt = new Date()
-  return this.save()
+  // Skip validation for partial updates (priceTargetCents may be missing in old vaults)
+  return this.save({ validateBeforeSave: false })
 }
 
 // Instance method to mark as withdrawn

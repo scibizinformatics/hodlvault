@@ -354,7 +354,7 @@ export default defineComponent({
   },
 
   methods: {
-    loadSelectedVault() {
+    async loadSelectedVault() {
       try {
         // Get selected vault from localStorage
         const selectedVaultData = localStorage.getItem('hodl-vault-selected-vault')
@@ -363,8 +363,44 @@ export default defineComponent({
           return
         }
 
-        const vaultData = JSON.parse(selectedVaultData)
-        console.log('vaultData', vaultData)
+        let vaultData = JSON.parse(selectedVaultData)
+        console.log('Initial vaultData from localStorage:', vaultData)
+
+        // ✅ Defensive: Convert old priceTarget field to priceTargetCents if needed
+        if (!vaultData.priceTargetCents && vaultData.priceTarget) {
+          vaultData.priceTargetCents = Math.round(vaultData.priceTarget * 100)
+          console.log('🔄 Converted priceTarget to priceTargetCents:', vaultData.priceTargetCents)
+        }
+
+        // ✅ Check if we have all required fields
+        const hasRequiredFields =
+          vaultData.ownerPkhHex &&
+          vaultData.oraclePkHex &&
+          vaultData.priceTargetCents &&
+          vaultData.vaultSalt
+
+        if (!hasRequiredFields && vaultData.contractAddress) {
+          console.log('⚠️ Incomplete vault data, fetching from backend...')
+          const { vaultStorage } = await import('src/services/vault-storage')
+          const completeVault = await vaultStorage.getVaultByContractAddressFromBackend(
+            vaultData.contractAddress,
+          )
+
+          if (completeVault) {
+            console.log('✅ Complete vault data fetched from backend:', completeVault)
+            vaultData = completeVault
+            // Update localStorage with complete data
+            localStorage.setItem('hodl-vault-selected-vault', JSON.stringify(completeVault))
+          } else {
+            console.error('❌ Failed to fetch complete vault data from backend')
+            this.$q.notify({
+              type: 'negative',
+              message: 'Failed to load vault data: Incomplete data',
+            })
+            return
+          }
+        }
+
         // Initialize contract for the selected vault
         const contract = initializeHodlVaultContract(
           vaultData.ownerPkhHex,
@@ -373,11 +409,15 @@ export default defineComponent({
           vaultData.vaultSalt,
         )
 
+        // Compute priceTarget (dollars) from priceTargetCents for display
+        const priceTargetCents = vaultData.priceTargetCents
+        const priceTarget = priceTargetCents / 100
+
         this.vault = {
           contractAddress: vaultData.contractAddress,
           balance: vaultData.balance || 0,
-          priceTarget: vaultData.priceTarget,
-          priceTargetCents: vaultData.priceTargetCents,
+          priceTarget: priceTarget,
+          priceTargetCents: priceTargetCents,
           ownerPkhHex: vaultData.ownerPkhHex,
           oraclePkHex: vaultData.oraclePkHex,
           contract,

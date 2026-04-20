@@ -61,7 +61,7 @@ class VaultStorageService {
    * @param {Object} vaultData - Vault information
    * @param {string} vaultData.walletAddress - Owner's wallet address
    * @param {string} vaultData.contractAddress - Contract address
-   * @param {number} vaultData.priceTarget - Target price in USD
+   * @param {number} vaultData.priceTargetCents - Target price in cents
    * @param {number} vaultData.balance - Current balance in satoshis
    * @param {string} vaultData.ownerPkhHex - Owner's public key hash
    * @param {string} vaultData.oraclePkHex - Oracle public key
@@ -74,7 +74,7 @@ class VaultStorageService {
     console.log('🔍 saveVault called with:', {
       contractAddress: vaultData.contractAddress,
       walletAddress: vaultData.walletAddress,
-      priceTarget: vaultData.priceTarget,
+      priceTargetCents: vaultData.priceTargetCents,
       hasOwnerPkhHex: !!vaultData.ownerPkhHex,
       hasOraclePkHex: !!vaultData.oraclePkHex,
       hasOriginalFundingAddress: !!vaultData.originalFundingAddress,
@@ -101,9 +101,11 @@ class VaultStorageService {
         console.warn('⚠️  Falling back to localStorage. Vault NOT synced to MongoDB.')
         return this.saveVaultLocal(vaultData)
       }
+    } else {
+      console.log('ℹ️  Backend disabled, saving to localStorage only')
     }
 
-    // Use localStorage only
+    // Fallback to localStorage only
     return this.saveVaultLocal(vaultData)
   }
 
@@ -125,10 +127,17 @@ class VaultStorageService {
       // Check if vault with same contract address already exists
       const existingIndex = vaults.findIndex((v) => v.contractAddress === vaultData.contractAddress)
 
+      // Ensure priceTargetCents is set (convert from priceTarget if needed)
+      let priceTargetCents = vaultData.priceTargetCents
+      if (!priceTargetCents && vaultData.priceTarget) {
+        priceTargetCents = Math.round(vaultData.priceTarget * 100)
+      }
+
       const vault = {
         ...vaultData,
         id: vaultId,
         vaultSalt,
+        priceTargetCents,
         createdAt: vaultData.createdAt || Date.now(),
         updatedAt: Date.now(),
       }
@@ -183,17 +192,18 @@ class VaultStorageService {
   /**
    * Check if vault with similar parameters already exists
    * @param {string} walletAddress - Wallet address
-   * @param {number} priceTarget - Target price in USD
+   * @param {number} priceTargetCents - Target price in cents
    * @returns {Object|null} Existing vault with same parameters or null
    */
-  checkForDuplicateVault(walletAddress, priceTarget) {
-    if (!walletAddress || !priceTarget) return null
+  checkForDuplicateVault(walletAddress, priceTargetCents) {
+    if (!walletAddress || !priceTargetCents) return null
 
     const allVaults = this.getAllVaults()
     return (
       allVaults.find(
         (vault) =>
-          vault.walletAddress === walletAddress && Math.abs(vault.priceTarget - priceTarget) < 0.01, // Allow small floating point differences
+          vault.walletAddress === walletAddress &&
+          Math.abs(vault.priceTargetCents - priceTargetCents) < 0.01, // Allow small floating point differences
       ) || null
     )
   }
@@ -206,18 +216,38 @@ class VaultStorageService {
   async getVaultsByWallet(walletAddress) {
     if (!walletAddress) return []
 
+    // ✅ Check backend availability if not already checked
+    if (!this.backendAvailable && this.useBackend) {
+      await this.checkBackendAvailability()
+    }
+
     // Try backend first if available
     if (this.shouldUseBackend()) {
       try {
         const result = await vaultApi.getVaultsByWallet(walletAddress)
-        console.log(`Vaults loaded from backend for ${walletAddress}:`, result.vaults?.length || 0)
+        console.log(
+          `✅ Vaults loaded from backend for ${walletAddress}:`,
+          result.vaults?.length || 0,
+        )
+
+        // Sync to localStorage for offline access
+        if (result.vaults?.length > 0) {
+          const existingLocal = this.getAllVaultsLocal()
+          const otherWallets = existingLocal.filter((v) => v.walletAddress !== walletAddress)
+          const merged = [...otherWallets, ...result.vaults]
+          localStorage.setItem(this.storageKey, JSON.stringify(merged))
+          console.log('💾 Synced backend vaults to localStorage')
+        }
+
         return result.vaults || []
       } catch (error) {
-        console.warn('Failed to load from backend, using localStorage:', error)
+        console.warn('❌ Failed to load from backend, using localStorage:', error)
+        this.backendAvailable = false
       }
     }
 
     // Fallback to localStorage
+    console.log('📦 Loading vaults from localStorage only')
     const allVaults = this.getAllVaultsLocal()
     return allVaults.filter((vault) => vault.walletAddress === walletAddress)
   }
@@ -244,6 +274,37 @@ class VaultStorageService {
 
     const allVaults = this.getAllVaults()
     return allVaults.find((vault) => vault.contractAddress === contractAddress) || null
+  }
+
+  /**
+   * Fetch a specific vault by contract address from backend
+   * This ensures we get complete vault data with all fields
+   * @param {string} contractAddress - Contract address of the vault
+   * @returns {Promise<Object|null>} Vault object or null if not found
+   */
+  async getVaultByContractAddressFromBackend(contractAddress) {
+    if (!contractAddress) return null
+
+    // Check backend availability if not already checked
+    if (!this.backendAvailable && this.useBackend) {
+      await this.checkBackendAvailability()
+    }
+
+    if (this.shouldUseBackend()) {
+      try {
+        console.log('🔍 Fetching vault by contract address from backend:', contractAddress)
+        const result = await vaultApi.getVaultByContractAddress(contractAddress)
+        console.log('✅ Vault found:', result.vault?.contractAddress)
+        return result.vault || null
+      } catch (error) {
+        console.warn('❌ Failed to fetch vault from backend:', error)
+        this.backendAvailable = false
+      }
+    }
+
+    // Fallback to localStorage
+    console.log('📦 Falling back to localStorage for vault:', contractAddress)
+    return this.getVaultByAddress(contractAddress)
   }
 
   /**

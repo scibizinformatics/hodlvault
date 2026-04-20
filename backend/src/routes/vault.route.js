@@ -10,6 +10,7 @@ import {
   checkDuplicateVault,
   updateVaultBalance,
   getVaultStats,
+  getVaultByContractAddress,
 } from '../controllers/vault.controller.js'
 
 const router = Router()
@@ -86,5 +87,14 @@ router.delete('/:id', deleteVault)
  * @body    balance - New balance in satoshis
  */
 router.put('/:address/balance', updateVaultBalance)
+
+/**
+ * @route   GET /api/v1/vaults/contract/:contractAddress
+ * @desc    Get a specific vault by contract address
+ * @access  Wallet-based
+ * @header  x-wallet-address - Wallet address
+ * @param   contractAddress - Contract address
+ */
+router.get('/contract/:contractAddress', getVaultByContractAddress)
 
 export default router

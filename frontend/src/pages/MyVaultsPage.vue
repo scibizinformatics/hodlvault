@@ -221,6 +221,7 @@ export default defineComponent({
       currentBchPrice: null,
       priceLoading: false,
       balanceInterval: null,
+      refreshInterval: null, // ✅ Auto-refresh interval for vault list
     }
   },
 
@@ -232,26 +233,61 @@ export default defineComponent({
 
   mounted() {
     this.loadVaults()
+    this.startAutoRefresh() // ✅ Start auto-refresh polling
     this.fetchCurrentPrice()
     this.startBalancePolling()
   },
 
   beforeUnmount() {
     this.stopBalancePolling()
+    this.stopAutoRefresh() // ✅ Stop auto-refresh polling
   },
 
   methods: {
     async loadVaults() {
       this.loading = true
       try {
-        // Load vaults from localStorage (for now)
-        const storedVaults = this.getAllStoredVaults()
+        // ✅ PROFESSIONAL: Fetch from backend first (source of truth)
+        let storedVaults = []
+
+        if (this.connectedAddress) {
+          try {
+            console.log('🔄 Fetching vaults from backend for wallet:', this.connectedAddress)
+            storedVaults = await vaultStorage.getVaultsByWallet(this.connectedAddress)
+            console.log(`✅ Loaded ${storedVaults.length} vaults from backend`)
+
+            // Sync backend vaults to localStorage for offline access
+            if (storedVaults.length > 0) {
+              const existingLocal = this.getAllStoredVaults()
+              const merged = this.mergeVaults(existingLocal, storedVaults)
+              localStorage.setItem('hodl-vault-all-vaults', JSON.stringify(merged))
+              console.log('💾 Synced backend vaults to localStorage')
+            }
+          } catch (backendError) {
+            console.warn(
+              '⚠️ Failed to fetch from backend, falling back to localStorage:',
+              backendError,
+            )
+            // Fallback to localStorage
+            storedVaults = this.getAllStoredVaults().filter(
+              (vault) => vault.walletAddress === this.connectedAddress,
+            )
+          }
+        } else {
+          // No wallet connected, use localStorage only
+          storedVaults = this.getAllStoredVaults()
+        }
 
         // Filter vaults for current wallet and refresh their balances
         this.vaults = await Promise.all(
           storedVaults
             .filter((vault) => vault.walletAddress === this.connectedAddress)
             .map(async (vault) => {
+              // Ensure priceTarget is computed from priceTargetCents for display
+              if (!vault.priceTarget && vault.priceTargetCents) {
+                vault.priceTarget = vault.priceTargetCents / 100
+              }
+
               // Refresh balance from blockchain
               try {
                 const { getAddressBalance } = await import('src/services/blockchain')
@@ -287,6 +323,57 @@ export default defineComponent({
         })
       } finally {
         this.loading = false
+      }
+    },
+
+    /**
+     * Merge local and backend vaults, keeping the most recent data
+     * Backend is source of truth, but preserves local data if newer
+     */
+    mergeVaults(localVaults, backendVaults) {
+      const merged = [...localVaults]
+
+      for (const backendVault of backendVaults) {
+        const existingIndex = merged.findIndex(
+          (v) => v.contractAddress === backendVault.contractAddress,
+        )
+
+        if (existingIndex >= 0) {
+          // Update existing with backend data (backend is source of truth)
+          const localVault = merged[existingIndex]
+          const backendUpdated = new Date(backendVault.updatedAt).getTime()
+          const localUpdated = localVault.updatedAt || 0
+
+          merged[existingIndex] = {
+            ...localVault,
+            ...backendVault,
+            // Keep local balance if it's more recent
+            ...(backendUpdated > localUpdated ? {} : { balance: localVault.balance }),
+          }
+        } else {
+          // Add new vault from backend
+          merged.push(backendVault)
+        }
+      }
+
+      return merged
+    },
+
+    // ✅ Auto-refresh methods for automatic data updates
+    startAutoRefresh() {
+      // Refresh every 30 seconds to keep data current
+      this.refreshInterval = setInterval(() => {
+        console.log('🔄 Auto-refreshing vault data...')
+        this.loadVaults()
+      }, 30000)
+      console.log('✅ Auto-refresh started (every 30s)')
+    },
+
+    stopAutoRefresh() {
+      if (this.refreshInterval) {
+        clearInterval(this.refreshInterval)
+        this.refreshInterval = null
+        console.log('🛑 Auto-refresh stopped')
       }
     },
 

@@ -206,23 +206,61 @@
                   </p>
                   <div class="row justify-center">
                     <q-btn
-                      color="primary"
+                      :color="canWithdraw ? 'primary' : 'grey-6'"
                       label="Withdraw"
                       :loading="withdrawing"
                       :disable="!canWithdraw"
                       icon="account_balance"
                       size="lg"
-                      class="text-weight-bold"
+                      :class="canWithdraw ? 'text-weight-bold' : 'text-weight-regular'"
                       padding="md xl"
                       @click="onWithdraw"
-                    />
+                    >
+                      <q-tooltip v-if="!canWithdraw && vault">
+                        <span v-if="!vault.balance || vault.balance <= 0"
+                          >Vault has no balance to withdraw</span
+                        >
+                        <span
+                          v-else-if="currentBchPrice && Number(currentBchPrice) < vault.priceTarget"
+                        >
+                          Current BCH price (${{ Number(currentBchPrice).toFixed(2) }}) is below
+                          your target (${{ vault.priceTarget.toFixed(2) }})
+                        </span>
+                      </q-tooltip>
+                    </q-btn>
                   </div>
-                  <div
-                    v-if="!canWithdraw && vault"
-                    class="text-caption text-negative q-mt-xs text-center"
-                  >
-                    Current price (${ currentBchPrice != null ? Number(currentBchPrice).toFixed(2) :
-                    '?' }}) is below target price (${{ vault.priceTarget.toFixed(2) }})
+
+                  <!-- Status Banner -->
+                  <div v-if="vault && currentBchPrice" class="q-mt-md">
+                    <q-banner
+                      :class="canWithdraw ? 'bg-positive text-white' : 'bg-grey-3 text-grey-8'"
+                      rounded
+                      dense
+                    >
+                      <template v-slot:avatar>
+                        <q-icon :name="canWithdraw ? 'lock_open' : 'lock'" />
+                      </template>
+                      <div class="text-body2">
+                        <span v-if="canWithdraw">
+                          <strong>Withdrawal Available</strong><br />
+                          Target price of ${{ vault.priceTarget.toFixed(2) }} has been reached!
+                        </span>
+                        <span v-else>
+                          <strong>Withdrawal Locked</strong><br />
+                          <span v-if="!vault.balance || vault.balance <= 0">
+                            Vault is empty - deposit funds first
+                          </span>
+                          <span
+                            v-else-if="
+                              currentBchPrice && Number(currentBchPrice) < vault.priceTarget
+                            "
+                          >
+                            Waiting for BCH to reach ${{ vault.priceTarget.toFixed(2) }} (currently
+                            ${{ Number(currentBchPrice).toFixed(2) }})
+                          </span>
+                        </span>
+                      </div>
+                    </q-banner>
                   </div>
                 </div>
 
@@ -325,7 +363,10 @@ export default defineComponent({
     canWithdraw() {
       if (!this.vault) return false
       if (this.currentBchPrice == null) return false
-      return Number(this.currentBchPrice) >= this.vault.priceTarget
+      // ✅ Check vault has balance to withdraw
+      const hasBalance = this.vault.balance > 0
+      const targetReached = Number(this.currentBchPrice) >= this.vault.priceTarget
+      return hasBalance && targetReached
     },
 
     displayBalance() {
@@ -366,6 +407,7 @@ export default defineComponent({
         let vaultData = JSON.parse(selectedVaultData)
         console.log('Initial vaultData from localStorage:', vaultData)
 
+        // ✅ Defensive: Convert old priceTarget field to priceTargetCents if needed
         // ✅ Defensive: Convert old priceTarget field to priceTargetCents if needed
         if (!vaultData.priceTargetCents && vaultData.priceTarget) {
           vaultData.priceTargetCents = Math.round(vaultData.priceTarget * 100)
@@ -489,8 +531,28 @@ export default defineComponent({
     startBalancePolling() {
       this.stopBalancePolling()
       this.balanceInterval = setInterval(() => {
-        this.refreshVaultBalance()
+        // Silent refresh - no loading indicators
+        this.refreshVaultBalanceSilent()
       }, 30000) // Poll every 30 seconds
+    },
+
+    async refreshVaultBalanceSilent() {
+      if (!this.vault?.contractAddress) return
+
+      try {
+        const { getAddressBalance } = await import('src/services/blockchain')
+        const balance = Number(await getAddressBalance(this.vault.contractAddress))
+
+        // Only update if changed to avoid unnecessary re-renders
+        if (this.vault.balance !== balance) {
+          this.vault.balance = balance
+          vaultStorage.updateVaultBalance(this.vault.contractAddress, balance)
+          console.log('Balance updated silently:', balance)
+        }
+      } catch (error) {
+        // Silently fail - don't show error to user
+        console.warn('Silent balance refresh failed:', error)
+      }
     },
 
     stopBalancePolling() {
@@ -583,30 +645,39 @@ export default defineComponent({
       console.log(this.vault)
       this.withdrawing = true
       try {
-        await paytacaOptimizedWithdrawal(
+        const result = await paytacaOptimizedWithdrawal(
           this.vault.contract,
           ownerAddress,
           this.oracleData.message_hex,
           this.oracleData.signature_hex,
         )
 
-        this.$q.notify({
-          type: 'positive',
-          message: 'Withdrawal successful! Funds have been returned to your wallet.',
-          icon: 'check_circle',
-        })
+        // ✅ Check result before showing success message
+        if (result?.success) {
+          this.$q.notify({
+            type: 'positive',
+            message: `Withdrawal successful! Funds have been returned to your wallet.${result.amountSatoshis ? ` (${result.amountSatoshis} sats)` : ''}`,
+            icon: 'check_circle',
+          })
 
-        // Refresh balance after withdrawal
-        setTimeout(() => {
-          this.refreshVaultBalance()
-        }, 5000)
+          // Refresh balance after withdrawal
+          setTimeout(() => {
+            this.refreshVaultBalance()
+          }, 5000)
+        } else {
+          // ✅ Show actual error from the service
+          this.$q.notify({
+            type: 'negative',
+            message: result?.error || 'Withdrawal failed - no transaction was sent',
+            timeout: 8000,
+          })
+        }
       } catch (err) {
         console.error('Withdrawal failed:', err)
         this.$q.notify({
           type: 'negative',
-          message: `RAW ERROR: ${JSON.stringify(err, null, 2)}`,
-          timeout: 15000,
-          html: true,
+          message: err.message || 'Withdrawal failed unexpectedly',
+          timeout: 8000,
         })
       } finally {
         this.withdrawing = false

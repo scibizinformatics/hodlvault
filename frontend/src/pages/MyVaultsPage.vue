@@ -233,14 +233,14 @@ export default defineComponent({
 
   mounted() {
     this.loadVaults()
-    this.startAutoRefresh() // ✅ Start auto-refresh polling
+    this.startSilentBalanceRefresh() // ✅ Start silent balance refresh (no blinking)
     this.fetchCurrentPrice()
     this.startBalancePolling()
   },
 
   beforeUnmount() {
     this.stopBalancePolling()
-    this.stopAutoRefresh() // ✅ Stop auto-refresh polling
+    this.stopSilentBalanceRefresh() // ✅ Stop silent balance refresh
   },
 
   methods: {
@@ -359,22 +359,49 @@ export default defineComponent({
       return merged
     },
 
-    // ✅ Auto-refresh methods for automatic data updates
-    startAutoRefresh() {
-      // Refresh every 30 seconds to keep data current
+    // ✅ Auto-refresh methods for automatic data updates (silent balance-only updates)
+    startSilentBalanceRefresh() {
+      // Silently refresh only balances every 30 seconds - no full page re-render
       this.refreshInterval = setInterval(() => {
-        console.log('🔄 Auto-refreshing vault data...')
-        this.loadVaults()
+        this.silentRefreshBalances()
       }, 30000)
-      console.log('✅ Auto-refresh started (every 30s)')
+      console.log('✅ Silent balance refresh started (every 30s)')
     },
 
-    stopAutoRefresh() {
+    stopSilentBalanceRefresh() {
       if (this.refreshInterval) {
         clearInterval(this.refreshInterval)
         this.refreshInterval = null
-        console.log('🛑 Auto-refresh stopped')
+        console.log('🛑 Silent balance refresh stopped')
       }
+    },
+
+    // Silently refresh only vault balances without re-rendering the entire list
+    async silentRefreshBalances() {
+      if (this.vaults.length === 0) return
+
+      console.log('🔄 Silently refreshing vault balances...')
+
+      for (let i = 0; i < this.vaults.length; i++) {
+        const vault = this.vaults[i]
+        try {
+          const { getAddressBalance } = await import('src/services/blockchain')
+          const newBalance = Number(await getAddressBalance(vault.contractAddress))
+
+          // Only update if balance changed to avoid unnecessary re-renders
+          if (vault.balance !== newBalance) {
+            vault.balance = newBalance
+            vault.canWithdraw = this.checkCanWithdraw(vault)
+            // Update storage silently
+            vaultStorage.updateVaultBalance(vault.contractAddress, newBalance)
+          }
+        } catch (error) {
+          // Silently fail - don't disrupt UI
+          console.warn(`Silent balance refresh failed for ${vault.contractAddress}:`, error)
+        }
+      }
+
+      console.log('✅ Silent balance refresh complete')
     },
 
     getAllStoredVaults() {

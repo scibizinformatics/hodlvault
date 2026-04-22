@@ -97,6 +97,27 @@ export default defineComponent({
     },
   },
 
+  watch: {
+    // Watch for wallet disconnect and redirect to homepage
+    connectedAddress(newVal, oldVal) {
+      if (oldVal && !newVal) {
+        // Address changed from set to null (disconnected)
+        console.log('Wallet disconnected detected via store, redirecting to home')
+
+        this.$q.notify({
+          type: 'warning',
+          message: 'Wallet disconnected. Redirecting to homepage.',
+          timeout: 3000,
+        })
+
+        // Redirect to homepage if not already there
+        if (this.$route.path !== '/') {
+          this.$router.push('/')
+        }
+      }
+    },
+  },
+
   mounted() {
     // Start watching wallet connection status changes
     this.startWalletStatusWatcher()
@@ -150,10 +171,24 @@ export default defineComponent({
       const currentAddress = this.$store.state.wallet?.address ?? null
       const walletConnectConnected = this.$walletConnect?.isConnected() ?? false
 
-      // If WalletConnect says disconnected but store still has address, clear store
+      // If WalletConnect says disconnected but store still has address, clear store and redirect
       if (!walletConnectConnected && currentAddress) {
-        console.log('Wallet status mismatch detected - clearing wallet state')
+        console.log(
+          'Wallet status mismatch detected - clearing wallet state and redirecting to home',
+        )
         this.$store.dispatch('wallet/clearWallet')
+
+        // ✅ Show notification to user
+        this.$q.notify({
+          type: 'warning',
+          message: 'Wallet disconnected. Redirecting to homepage.',
+          timeout: 3000,
+        })
+
+        // ✅ Redirect to homepage if not already there
+        if (this.$route.path !== '/') {
+          this.$router.push('/')
+        }
       }
 
       // If WalletConnect says connected but store has no address, try to restore
@@ -191,10 +226,7 @@ export default defineComponent({
       if (this.$walletConnect) {
         this.$walletConnect.disconnect()
       }
-      this.$q.notify({
-        type: 'info',
-        message: 'Wallet disconnected',
-      })
+      // Note: Notification is handled by the watcher in MainLayout
     },
 
     onMockConnect() {

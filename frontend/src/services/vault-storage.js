@@ -358,18 +358,48 @@ class VaultStorageService {
     if (this.shouldUseBackend() && vaultId) {
       try {
         await vaultApi.deleteVault(vaultId)
-        console.log('Vault deleted from backend:', contractAddress)
+        console.log('✅ Vault deleted from backend:', contractAddress)
       } catch (error) {
-        console.warn('Failed to delete from backend:', error)
+        console.error('❌ Backend delete failed:', {
+          vaultId,
+          contractAddress,
+          error: error.response?.data || error.message,
+          status: error.response?.status,
+        })
+        // Re-throw so caller knows it failed
+        throw new Error(`Backend delete failed: ${error.response?.data?.message || error.message}`)
       }
+    } else {
+      console.log('⚠️ Skipping backend delete:', { useBackend: this.shouldUseBackend(), vaultId })
     }
 
     // Always delete from localStorage
     const vaults = this.getAllVaultsLocal()
+    const vaultToDelete = vaults.find((v) => v.contractAddress === contractAddress)
     const filteredVaults = vaults.filter((v) => v.contractAddress !== contractAddress)
 
     localStorage.setItem(this.storageKey, JSON.stringify(filteredVaults))
-    console.log('Vault deleted from localStorage:', contractAddress)
+    console.log('✅ Vault deleted from localStorage:', contractAddress)
+
+    // Clear selected vault if it was the deleted one
+    if (vaultToDelete) {
+      const selectedVaultJson = localStorage.getItem('hodl-vault-selected-vault')
+      if (selectedVaultJson) {
+        try {
+          const selectedVault = JSON.parse(selectedVaultJson)
+          if (
+            selectedVault.contractAddress === contractAddress ||
+            selectedVault._id === vaultId ||
+            selectedVault.id === vaultId
+          ) {
+            localStorage.removeItem('hodl-vault-selected-vault')
+            console.log('🧹 Cleared selected vault from localStorage')
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
   }
 
   /**

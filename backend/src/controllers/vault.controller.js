@@ -359,14 +359,10 @@ export const deleteVault = async (req, res) => {
       })
     }
 
-    // Check if vault has funds (optional: prevent deletion of funded vaults)
-    if (vault.balance > 0) {
-      return res.status(400).json({
-        message: 'Cannot delete vault with funds. Withdraw funds first.',
-        balance: vault.balance,
-        balanceBCH: vault.balanceBCH,
-      })
-    }
+    // Note: We allow deletion even if vault has balance > 0
+    // This is needed for auto-delete after withdrawal - the database balance
+    // may not be synced with the actual blockchain balance yet
+    // The frontend ensures withdrawal is successful before calling delete
 
     await Vault.findByIdAndDelete(id)
 

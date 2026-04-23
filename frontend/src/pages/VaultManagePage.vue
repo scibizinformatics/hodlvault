@@ -456,6 +456,7 @@ export default defineComponent({
         const priceTarget = priceTargetCents / 100
 
         this.vault = {
+          _id: vaultData._id || vaultData.id, // ✅ Include MongoDB ID for delete operations
           contractAddress: vaultData.contractAddress,
           balance: vaultData.balance || 0,
           priceTarget: priceTarget,
@@ -656,14 +657,40 @@ export default defineComponent({
         if (result?.success) {
           this.$q.notify({
             type: 'positive',
-            message: `Withdrawal successful! Funds have been returned to your wallet.${result.amountSatoshis ? ` (${result.amountSatoshis} sats)` : ''}`,
+            message: `Withdrawal successful! Vault will be removed.${result.amountSatoshis ? ` (${result.amountSatoshis} sats)` : ''}`,
             icon: 'check_circle',
           })
 
-          // Refresh balance after withdrawal
+          // ✅ Delete vault from backend and localStorage
+          if (this.vault) {
+            const vaultId = this.vault._id || this.vault.id
+            console.log('🗑️ Deleting vault:', {
+              contractAddress: this.vault.contractAddress,
+              vaultId: vaultId,
+            })
+            try {
+              await vaultStorage.deleteVault(this.vault.contractAddress, vaultId)
+              console.log('✅ Vault deleted after successful withdrawal')
+              this.$q.notify({
+                type: 'positive',
+                message: 'Vault removed from your list',
+                timeout: 2000,
+              })
+            } catch (deleteError) {
+              console.error('❌ Failed to delete vault:', deleteError)
+              this.$q.notify({
+                type: 'warning',
+                message:
+                  'Withdrawal succeeded but vault cleanup failed. It will disappear on next refresh.',
+                timeout: 5000,
+              })
+            }
+          }
+
+          // ✅ Redirect to My Vaults page after short delay
           setTimeout(() => {
-            this.refreshVaultBalance()
-          }, 5000)
+            this.$router.push('/my-vaults')
+          }, 1500)
         } else {
           // ✅ Show actual error from the service
           this.$q.notify({

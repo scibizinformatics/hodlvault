@@ -412,7 +412,9 @@ export default defineComponent({
         )
 
         this.vault = {
-          id: vaultData.id, // Use vault ID
+          _id: vaultData._id || vaultData.id, // ✅ Use _id for consistency
+          id: vaultData.id, // Keep id for backwards compatibility
+          name: vaultData.name || 'Unnamed Vault', // ✅ Include name for activity logs
           contractAddress: vaultData.contractAddress,
           balance: vaultData.balance || 0,
           priceTarget: vaultData.priceTarget,
@@ -534,8 +536,12 @@ export default defineComponent({
         const balance = Number(await getAddressBalance(contractAddress))
 
         // Store vault info in new multi-vault system
+        const vaultId = vaultStorage.generateVaultId()
+        const vaultName = this.form.vaultName || `Vault #${contractAddress.slice(-8)}`
         this.vault = {
-          id: vaultStorage.generateVaultId(), // Use unique ID
+          _id: vaultId, // Use _id for consistency with backend/MongoDB
+          id: vaultId, // Keep id for backwards compatibility
+          name: vaultName, // ✅ Include name for activity logs
           contractAddress,
           balance: Number(balance),
           priceTarget: this.form.priceTarget,
@@ -549,7 +555,7 @@ export default defineComponent({
 
         // Save vault to multi-vault storage system
         vaultStorage.saveVault({
-          id: this.vault.id,
+          id: this.vault._id,
           walletAddress: this.walletAddress,
           contractAddress,
           priceTarget: this.form.priceTarget,
@@ -560,7 +566,7 @@ export default defineComponent({
           vaultSalt, // Save the salt
           balance: Number(balance),
           createdAt: Date.now(),
-          name: this.form.vaultName || `Vault #${contractAddress.slice(-8)}`, // Use custom name or auto-generated
+          name: vaultName, // Use the same name
         })
 
         this.$q.notify({
@@ -578,8 +584,8 @@ export default defineComponent({
           await this.preSignWithdrawals()
         }
 
-        // Always start watching balance after vault creation (covers both manual and WalletConnect deposits)
-        this.startBalancePolling()
+        // ✅ Start rapid deposit confirmation polling (professional UX)
+        this.startDepositConfirmationPolling()
 
         // Redirect to My Vaults after successful creation
         this.$q.notify({
@@ -639,6 +645,100 @@ export default defineComponent({
       return /^(bitcoincash|bchtest|chipnet):[a-zA-Z0-9]+$/i.test(trimmed)
     },
 
+    /**
+     * ✅ Rapid polling after deposit to detect confirmation quickly (professional UX)
+     * Polls every 3 seconds for up to 60 seconds until balance increases
+     */
+    startDepositConfirmationPolling() {
+      // Stop any existing polling
+      this.stopBalancePolling()
+
+      const startTime = Date.now()
+      const initialBalance = this.vault?.balance || 0
+      const maxDuration = 60000 // 60 seconds max
+      const pollInterval = 3000 // 3 seconds between checks
+
+      console.log('🔍 Starting deposit confirmation polling...', {
+        initialBalance,
+        contractAddress: this.vault?.contractAddress,
+      })
+
+      const checkBalance = async () => {
+        const elapsed = Date.now() - startTime
+
+        // Stop after max duration
+        if (elapsed >= maxDuration) {
+          console.log('⏱️ Deposit confirmation polling timed out, switching to normal polling')
+          this.startBalancePolling()
+          return
+        }
+
+        // Stop if vault changed
+        if (!this.vault || !this.vault.contractAddress) {
+          return
+        }
+
+        try {
+          const balance = await getAddressBalance(this.vault.contractAddress)
+          const numeric = Number(balance)
+
+          // Check if balance increased (deposit confirmed!)
+          if (numeric > initialBalance) {
+            const depositAmount = numeric - initialBalance
+            console.log('✅ Deposit confirmed!', {
+              initialBalance,
+              currentBalance: numeric,
+              depositAmount,
+              elapsed: `${elapsed}ms`,
+            })
+
+            // Update the UI immediately
+            this.vault.balance = numeric
+
+            // Log deposit activity
+            this.logDepositActivity(depositAmount)
+
+            // Switch back to normal polling
+            this.startBalancePolling()
+            return
+          }
+
+          // Balance hasn't changed yet, continue polling
+          console.log(`⏳ Deposit not yet confirmed... (${elapsed}ms elapsed, balance: ${numeric})`)
+          setTimeout(checkBalance, pollInterval)
+        } catch (error) {
+          console.warn('Balance check failed during deposit confirmation:', error)
+          setTimeout(checkBalance, pollInterval)
+        }
+      }
+
+      // Start first check after 1 second, then every 3 seconds
+      setTimeout(checkBalance, 1000)
+    },
+
+    async logDepositActivity(amountSatoshis) {
+      try {
+        const { activityLogApi } = await import('src/services/activity-log-api.js')
+        await activityLogApi.logDeposit({
+          vaultId: this.vault._id,
+          vaultName: this.vault.name || 'Unnamed Vault',
+          contractAddress: this.vault.contractAddress,
+          amountSatoshis: amountSatoshis,
+          txHash: null,
+        })
+        console.log('✅ Deposit activity logged:', amountSatoshis, 'satoshis')
+      } catch (logError) {
+        console.warn('⚠️ Failed to log deposit activity:', logError)
+      }
+    },
+
+    stopBalancePolling() {
+      if (this.depositPollInterval) {
+        clearInterval(this.depositPollInterval)
+        this.depositPollInterval = null
+      }
+    },
+
     startBalancePolling() {
       if (this.depositPollInterval) {
         clearInterval(this.depositPollInterval)
@@ -659,11 +759,38 @@ export default defineComponent({
           if (numeric > 0) {
             clearInterval(this.depositPollInterval)
             this.depositPollInterval = null
-            this.$q.notify({
-              type: 'positive',
-              message: 'Deposit confirmed',
-              icon: 'check_circle',
+
+            // ✅ Log initial deposit activity
+            console.log('📝 Attempting to log deposit activity:', {
+              vaultId: this.vault?._id,
+              vaultName: this.vault?.name,
+              contractAddress: this.vault?.contractAddress,
+              amountSatoshis: numeric,
             })
+            try {
+              const { activityLogApi } = await import('src/services/activity-log-api.js')
+              const result = await activityLogApi.logDeposit({
+                vaultId: this.vault._id,
+                vaultName: this.vault.name || 'Unnamed Vault',
+                contractAddress: this.vault.contractAddress,
+                amountSatoshis: numeric,
+                txHash: null,
+              })
+              console.log('✅ Initial deposit activity logged:', result)
+            } catch (logError) {
+              console.error(
+                '❌ Failed to log deposit activity:',
+                logError.message,
+                logError.response?.data,
+              )
+              this.$q.notify({
+                type: 'warning',
+                message:
+                  'Deposit confirmed but activity log failed: ' +
+                  (logError.message || 'Unknown error'),
+                timeout: 5000,
+              })
+            }
           } else if (elapsed >= 120000) {
             clearInterval(this.depositPollInterval)
             this.depositPollInterval = null

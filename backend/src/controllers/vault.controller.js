@@ -1,5 +1,6 @@
 import { Vault } from '../models/vault.model.js'
 import mongoose from 'mongoose'
+import { logActivity } from '../services/activity-log.service.js'
 
 /**
  * Create a new vault
@@ -102,6 +103,19 @@ export const createVault = async (req, res) => {
     })
 
     await vault.save()
+
+    // Log vault creation activity
+    await logActivity({
+      walletAddress,
+      activityType: 'VAULT_CREATED',
+      vaultId: vault._id,
+      vaultName: name || 'Unnamed Vault',
+      contractAddress,
+      details: {
+        priceTargetCents,
+        amountSatoshis: balance || 0,
+      },
+    })
 
     res.status(201).json({
       message: 'Vault created successfully',
@@ -363,6 +377,19 @@ export const deleteVault = async (req, res) => {
     // This is needed for auto-delete after withdrawal - the database balance
     // may not be synced with the actual blockchain balance yet
     // The frontend ensures withdrawal is successful before calling delete
+
+    // Log vault deletion before removing it
+    await logActivity({
+      walletAddress,
+      activityType: 'VAULT_DELETED',
+      vaultId: id,
+      vaultName: vault.name || 'Unnamed Vault',
+      contractAddress: vault.contractAddress,
+      details: {
+        finalBalance: vault.balance,
+        priceTargetCents: vault.priceTargetCents,
+      },
+    })
 
     await Vault.findByIdAndDelete(id)
 

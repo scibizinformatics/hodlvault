@@ -34,6 +34,17 @@
                 {{ connectedAddress || 'Not Connected' }}
               </div>
             </q-card>
+
+            <!-- Activity History Button -->
+            <div class="q-mt-md">
+              <q-btn
+                flat
+                color="primary"
+                icon="history"
+                label="Activity History"
+                @click="showActivityHistory = true"
+              />
+            </div>
           </div>
 
           <!-- Vault List -->
@@ -204,6 +215,86 @@
         </div>
       </div>
     </div>
+
+    <!-- Activity History Modal -->
+    <q-dialog v-model="showActivityHistory" maximized>
+      <q-card
+        :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-white'"
+        style="max-width: 800px; width: 90vw"
+      >
+        <q-card-section class="row items-center">
+          <q-icon name="history" size="32px" class="q-mr-sm" color="primary" />
+          <div class="text-h6">Activity History</div>
+          <q-space />
+          <q-btn icon="close" flat round dense v-close-popup />
+        </q-card-section>
+
+        <q-separator />
+
+        <q-card-section class="q-pa-none" style="max-height: 70vh; overflow-y: auto">
+          <q-list v-if="activityLogs.length > 0">
+            <q-item v-for="log in activityLogs" :key="log._id" class="activity-item">
+              <q-item-section avatar>
+                <q-icon
+                  :name="getActivityIcon(log.activityType)"
+                  :color="getActivityColor(log.activityType)"
+                  size="md"
+                />
+              </q-item-section>
+
+              <q-item-section>
+                <q-item-label class="text-weight-medium">
+                  {{ formatActivityType(log.activityType) }}
+                </q-item-label>
+                <q-item-label caption>
+                  <span v-if="log.vaultName">Vault: {{ log.vaultName }}</span>
+                  <span v-if="log.details?.amountSatoshis">
+                    • {{ formatBCH(log.details.amountSatoshis) }} BCH
+                  </span>
+                </q-item-label>
+                <q-item-label caption class="text-grey-6">
+                  {{ formatDate(log.timestamp) }}
+                </q-item-label>
+              </q-item-section>
+
+              <q-item-section side v-if="log.details?.txHash">
+                <q-btn
+                  flat
+                  dense
+                  size="sm"
+                  color="primary"
+                  icon="open_in_new"
+                  label="View TX"
+                  @click="openTxExplorer(log.details.txHash)"
+                />
+              </q-item-section>
+            </q-item>
+          </q-list>
+
+          <div v-else-if="loadingLogs" class="text-center q-pa-lg">
+            <q-spinner color="primary" size="32px" />
+            <p class="text-grey-6 q-mt-sm">Loading activity history...</p>
+          </div>
+
+          <div v-else class="text-center q-pa-lg text-grey-6">
+            <q-icon name="history" size="48px" class="q-mb-sm" />
+            <p>No activity history yet</p>
+            <p class="text-caption">Your vault operations will appear here</p>
+          </div>
+
+          <!-- Load More -->
+          <div v-if="hasMoreLogs && !loadingLogs" class="text-center q-pa-md">
+            <q-btn
+              flat
+              color="primary"
+              label="Load More"
+              :loading="loadingMore"
+              @click="loadMoreLogs"
+            />
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -222,6 +313,13 @@ export default defineComponent({
       priceLoading: false,
       balanceInterval: null,
       refreshInterval: null, // ✅ Auto-refresh interval for vault list
+      showActivityHistory: false,
+      activityLogs: [],
+      loadingLogs: false,
+      loadingMore: false,
+      logsSkip: 0,
+      logsLimit: 20,
+      hasMoreLogs: false,
     }
   },
 
@@ -449,7 +547,11 @@ export default defineComponent({
 
     formatDate(timestamp) {
       if (!timestamp) return 'Unknown'
-      return new Date(timestamp).toLocaleDateString()
+      const date = new Date(timestamp)
+      const dateStr = date.toLocaleDateString()
+      const timeStr = date.toLocaleTimeString()
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      return `${dateStr} ${timeStr} (${timeZone})`
     },
 
     getProgressPercentage(vault) {
@@ -529,6 +631,89 @@ export default defineComponent({
         console.log('Vault balances refreshed automatically')
       } catch (error) {
         console.error('Failed to refresh vault balances:', error)
+      }
+    },
+
+    async loadActivityHistory() {
+      this.loadingLogs = true
+      this.logsSkip = 0
+      try {
+        const { activityLogApi } = await import('src/services/activity-log-api.js')
+        const result = await activityLogApi.getHistory(this.logsLimit, this.logsSkip)
+
+        this.activityLogs = result.logs || []
+        this.hasMoreLogs = result.hasMore || false
+      } catch (error) {
+        console.error('Failed to load activity history:', error)
+        this.$q.notify({
+          type: 'negative',
+          message: 'Failed to load activity history',
+          timeout: 3000,
+        })
+      } finally {
+        this.loadingLogs = false
+      }
+    },
+
+    async loadMoreLogs() {
+      this.loadingMore = true
+      this.logsSkip += this.logsLimit
+
+      try {
+        const { activityLogApi } = await import('src/services/activity-log-api.js')
+        const result = await activityLogApi.getHistory(this.logsLimit, this.logsSkip)
+
+        this.activityLogs.push(...(result.logs || []))
+        this.hasMoreLogs = result.hasMore || false
+      } catch (error) {
+        console.error('Failed to load more logs:', error)
+      } finally {
+        this.loadingMore = false
+      }
+    },
+
+    getActivityIcon(type) {
+      const icons = {
+        VAULT_CREATED: 'add_circle',
+        DEPOSIT: 'arrow_downward',
+        WITHDRAWAL: 'arrow_upward',
+        PRICE_TARGET_REACHED: 'check_circle',
+        VAULT_DELETED: 'delete',
+      }
+      return icons[type] || 'info'
+    },
+
+    getActivityColor(type) {
+      const colors = {
+        VAULT_CREATED: 'positive',
+        DEPOSIT: 'red', // 🔴 Red for deposits (money going in)
+        WITHDRAWAL: 'positive', // 🟢 Green for withdrawals (money going out)
+        PRICE_TARGET_REACHED: 'warning',
+        VAULT_DELETED: 'grey',
+      }
+      return colors[type] || 'grey'
+    },
+
+    formatActivityType(type) {
+      return type
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(/\b\w/g, (l) => l.toUpperCase())
+    },
+
+    formatBCH(satoshis) {
+      return (satoshis / 100000000).toFixed(8)
+    },
+
+    openTxExplorer(txHash) {
+      window.open(`https://chipnet.bch.ninja/tx/${txHash}`, '_blank')
+    },
+  },
+
+  watch: {
+    showActivityHistory(val) {
+      if (val) {
+        this.loadActivityHistory()
       }
     },
   },

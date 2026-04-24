@@ -1,0 +1,51 @@
+import { ActivityLog } from '../models/activity-log.model.js'
+
+export async function logActivity(data) {
+  try {
+    const log = new ActivityLog({
+      walletAddress: data.walletAddress.toLowerCase(),
+      activityType: data.activityType,
+      vaultId: data.vaultId,
+      vaultName: data.vaultName,
+      contractAddress: data.contractAddress,
+      details: data.details,
+      status: data.status || 'SUCCESS',
+      timestamp: data.timestamp || new Date(),
+    })
+
+    await log.save()
+    console.log(`✅ Activity logged: ${data.activityType} for ${data.walletAddress}`)
+    return log
+  } catch (error) {
+    console.error('❌ Failed to log activity:', error)
+    return null
+  }
+}
+
+export async function getActivityHistory(walletAddress, options = {}) {
+  const { limit = 50, skip = 0, activityType } = options
+
+  const query = { walletAddress: walletAddress.toLowerCase() }
+  if (activityType) query.activityType = activityType
+
+  const logs = await ActivityLog.find(query).sort({ timestamp: -1 }).skip(skip).limit(limit).lean()
+
+  const total = await ActivityLog.countDocuments(query)
+
+  return { logs, total }
+}
+
+export async function getActivityStats(walletAddress) {
+  const stats = await ActivityLog.aggregate([
+    { $match: { walletAddress: walletAddress.toLowerCase() } },
+    {
+      $group: {
+        _id: '$activityType',
+        count: { $sum: 1 },
+        totalAmount: { $sum: '$details.amountSatoshis' },
+      },
+    },
+  ])
+
+  return stats
+}

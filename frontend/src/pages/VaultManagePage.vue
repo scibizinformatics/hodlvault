@@ -61,21 +61,72 @@
           <div v-if="vault">
             <q-card flat bordered :class="$q.dark.isActive ? 'bg-grey-9' : 'bg-white'">
               <q-card-section>
-                <h3 class="text-h5 text-weight-bold text-white q-mb-md">Vault Status</h3>
+                <div class="q-mb-md">
+                  <h3 class="text-h5 text-weight-bold text-white q-mb-xs">Vault Status</h3>
+                  <div class="text-subtitle1 text-primary text-weight-medium">
+                    {{ vault.name || 'Unnamed Vault' }}
+                  </div>
+                </div>
 
                 <!-- Contract Address -->
                 <div class="q-mb-lg">
                   <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
                     Contract Address
                   </label>
-                  <q-input
-                    :model-value="vault.contractAddress"
-                    readonly
-                    outlined
-                    dark
-                    class="monospace text-primary"
-                    input-class="text-select"
+                  <div class="row items-center q-gutter-sm">
+                    <q-input
+                      :model-value="vault.contractAddress"
+                      readonly
+                      outlined
+                      dark
+                      class="monospace text-primary col"
+                      input-class="text-select"
+                    />
+                    <q-btn
+                      flat
+                      dense
+                      round
+                      icon="content_copy"
+                      color="primary"
+                      @click="copyContractAddress"
+                      aria-label="Copy contract address"
+                    >
+                      <q-tooltip>Copy address to clipboard</q-tooltip>
+                    </q-btn>
+                  </div>
+                </div>
+
+                <!-- QR Code Button (efficient UX: only poll when user intends to deposit) -->
+                <div class="q-mb-lg">
+                  <q-btn
+                    :color="showQRCode ? 'negative' : 'primary'"
+                    :icon="showQRCode ? 'visibility_off' : 'qr_code'"
+                    :label="showQRCode ? 'Hide QR Code' : 'Show QR Code to Deposit'"
+                    size="md"
+                    class="q-mb-md"
+                    @click="toggleQRCode"
                   />
+
+                  <q-slide-transition>
+                    <div v-show="showQRCode">
+                      <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
+                        Vault Deposit QR
+                      </label>
+                      <div class="row items-center q-gutter-md">
+                        <q-card flat bordered class="q-pa-sm flex flex-center">
+                          <QrcodeVue :value="vault.contractAddress" :size="160" />
+                        </q-card>
+                        <div class="text-body2 text-grey-6">
+                          Scan this QR in Paytaca to fill the vault address automatically, then
+                          enter the amount you want to send.
+                          <br />
+                          <span class="text-positive text-weight-medium">
+                            Balance updates automatically when deposit is detected.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </q-slide-transition>
                 </div>
 
                 <!-- Balance -->
@@ -117,55 +168,6 @@
                   >
                     Verify balance on chipnet explorer →
                   </a>
-                </div>
-
-                <!-- Deposit More -->
-                <div class="q-mb-lg">
-                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                    Deposit More into Vault
-                  </label>
-                  <div class="row q-col-gutter-sm items-center">
-                    <div class="col-12 col-md-6">
-                      <q-input
-                        v-model.number="additionalDepositAmount"
-                        label="Additional amount (satoshis)"
-                        type="number"
-                        outlined
-                        dark
-                        :rules="[
-                          (val) => !!val || 'Amount is required',
-                          (val) => val >= 1000 || 'Minimum amount is 1000 satoshis',
-                        ]"
-                        hint="Send more BCH into this vault using your Paytaca wallet."
-                      />
-                    </div>
-                    <div class="col-auto q-mt-sm q-mt-md-none">
-                      <q-btn
-                        color="primary"
-                        label="Deposit More"
-                        :loading="depositing"
-                        :disable="!canDepositMore"
-                        icon="account_balance_wallet"
-                        @click="onDepositMore"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <!-- QR Code -->
-                <div class="q-mb-lg">
-                  <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                    Vault Deposit QR
-                  </label>
-                  <div class="row items-center q-gutter-md">
-                    <q-card flat bordered class="q-pa-sm flex flex-center">
-                      <QrcodeVue :value="vault.contractAddress" :size="160" />
-                    </q-card>
-                    <div class="text-body2 text-grey-6">
-                      Scan this QR in Paytaca to fill the vault address automatically, then enter
-                      the amount you want to send.
-                    </div>
-                  </div>
                 </div>
 
                 <!-- Price Information -->
@@ -310,11 +312,7 @@
 <script>
 import { defineComponent } from 'vue'
 import QrcodeVue from 'qrcode.vue'
-import {
-  initializeHodlVaultContract,
-  getAddressBalance,
-  depositToVault,
-} from 'src/services/blockchain'
+import { initializeHodlVaultContract, getAddressBalance } from 'src/services/blockchain'
 import { paytacaOptimizedWithdrawal } from 'src/services/paytaca-optimized-withdrawal'
 import { fetchOraclePrice } from 'src/services/oracle'
 import { vaultStorage } from 'src/services/vault-storage'
@@ -328,8 +326,6 @@ export default defineComponent({
 
   data() {
     return {
-      additionalDepositAmount: null,
-      depositing: false,
       withdrawing: false,
       balanceInterval: null,
       vault: null,
@@ -343,21 +339,14 @@ export default defineComponent({
       },
       balanceRefreshing: false,
       enableAutoWithdrawal: false,
+      showQRCode: false, // ✅ QR code hidden by default until user clicks button
+      depositPollTimeout: null, // Track rapid polling timeout for cleanup
     }
   },
 
   computed: {
     hasWallet() {
       return !!this.$store.state.wallet?.address
-    },
-
-    canDepositMore() {
-      return (
-        this.vault &&
-        this.hasWallet &&
-        this.additionalDepositAmount &&
-        this.additionalDepositAmount >= 1000
-      )
     },
 
     canWithdraw() {
@@ -392,6 +381,7 @@ export default defineComponent({
 
   beforeUnmount() {
     this.stopBalancePolling()
+    this.stopDepositConfirmationPolling()
   },
 
   methods: {
@@ -457,6 +447,7 @@ export default defineComponent({
 
         this.vault = {
           _id: vaultData._id || vaultData.id, // ✅ Include MongoDB ID for delete operations
+          name: vaultData.name || 'Unnamed Vault', // ✅ Include vault name for activity logs
           contractAddress: vaultData.contractAddress,
           balance: vaultData.balance || 0,
           priceTarget: priceTarget,
@@ -563,57 +554,140 @@ export default defineComponent({
       }
     },
 
-    async onDepositMore() {
-      if (!this.canDepositMore) return
+    /**
+     * Toggle QR code visibility and start/stop rapid polling accordingly
+     * Efficient UX: Only poll when user intends to deposit (QR is visible)
+     */
+    toggleQRCode() {
+      this.showQRCode = !this.showQRCode
 
-      this.depositing = true
-      try {
-        const wc = this.$walletConnect
-        if (!wc || !wc.isConnected()) {
-          this.$q.notify({
-            type: 'negative',
-            message: 'Please connect your wallet first',
-          })
+      if (this.showQRCode) {
+        // User wants to deposit - start rapid polling
+        console.log(' QR code shown - starting rapid deposit detection polling')
+        this.startDepositConfirmationPolling()
+      } else {
+        // User closed QR - stop rapid polling to save resources
+        console.log(' QR code hidden - stopping rapid polling')
+        this.stopDepositConfirmationPolling()
+        // Resume normal slow polling
+        this.startBalancePolling()
+      }
+    },
+
+    /**
+     * Rapid polling after deposit to detect confirmation quickly (professional UX)
+     * Polls every 3 seconds for up to 60 seconds until balance increases
+     */
+    startDepositConfirmationPolling() {
+      // Stop any existing polling
+      this.stopBalancePolling()
+      this.stopDepositConfirmationPolling()
+
+      const startTime = Date.now()
+      const initialBalance = this.vault?.balance || 0
+      const maxDuration = 60000 // 60 seconds max
+      const pollInterval = 3000 // 3 seconds between checks
+
+      console.log(' Starting deposit confirmation polling...', {
+        initialBalance,
+        contractAddress: this.vault?.contractAddress,
+      })
+
+      const checkBalance = async () => {
+        // Stop if QR was hidden
+        if (!this.showQRCode) {
+          console.log(' Rapid polling stopped (QR hidden)')
           return
         }
 
-        const depositPromise = depositToVault(
-          this.vault.contractAddress,
-          this.additionalDepositAmount,
-          (method, params) => wc.request(method, params),
-        )
+        const elapsed = Date.now() - startTime
 
-        const depositResult = await Promise.race([
-          depositPromise,
-          new Promise((resolve) => setTimeout(() => resolve({ txid: null, raw: null }), 20000)),
-        ])
+        // Stop after max duration
+        if (elapsed >= maxDuration) {
+          console.log(' Deposit confirmation polling timed out, switching to normal polling')
+          this.startBalancePolling()
+          return
+        }
 
-        const txid = depositResult && depositResult.txid
+        try {
+          const { getAddressBalance } = await import('src/services/blockchain')
+          const currentBalance = Number(await getAddressBalance(this.vault.contractAddress))
+
+          // Check if balance increased (deposit confirmed!)
+          if (currentBalance > initialBalance) {
+            const depositAmount = currentBalance - initialBalance
+            console.log(' Deposit confirmed!', {
+              initialBalance,
+              currentBalance,
+              depositAmount,
+              elapsed: `${elapsed}ms`,
+            })
+
+            // Update the UI immediately
+            this.vault.balance = currentBalance
+            vaultStorage.updateVaultBalance(this.vault.contractAddress, currentBalance)
+
+            // Notify user
+            this.$q.notify({
+              type: 'positive',
+              message: `Deposit confirmed! +${depositAmount} satoshis`,
+              icon: 'check_circle',
+              timeout: 5000,
+            })
+
+            // Hide QR code after successful deposit
+            this.showQRCode = false
+
+            // Switch back to normal polling
+            this.startBalancePolling()
+            return
+          }
+
+          // Balance hasn't changed yet, continue polling
+          console.log(
+            ` Deposit not yet confirmed... (${elapsed}ms elapsed, balance: ${currentBalance})`,
+          )
+          this.depositPollTimeout = setTimeout(checkBalance, pollInterval)
+        } catch (error) {
+          console.warn('Balance check failed during deposit confirmation:', error)
+          this.depositPollTimeout = setTimeout(checkBalance, pollInterval)
+        }
+      }
+
+      // Start first check immediately, then every 3 seconds
+      this.depositPollTimeout = setTimeout(checkBalance, 1000)
+    },
+
+    /**
+     * Stop rapid deposit confirmation polling
+     */
+    stopDepositConfirmationPolling() {
+      if (this.depositPollTimeout) {
+        clearTimeout(this.depositPollTimeout)
+        this.depositPollTimeout = null
+        console.log(' Rapid deposit polling stopped')
+      }
+    },
+
+    /**
+     * Copy contract address to clipboard
+     */
+    async copyContractAddress() {
+      try {
+        await navigator.clipboard.writeText(this.vault.contractAddress)
         this.$q.notify({
           type: 'positive',
-          message: txid
-            ? `Deposit transaction submitted. TX: ${txid}`
-            : 'Deposit submitted in wallet. Waiting for network confirmation...',
-          icon: 'check_circle',
+          message: 'Contract address copied to clipboard',
+          icon: 'content_copy',
+          timeout: 2000,
         })
-
-        // Reset form
-        this.additionalDepositAmount = null
-
-        // Refresh balance after deposit
-        setTimeout(() => {
-          this.refreshVaultBalance()
-        }, 5000)
-      } catch (depositErr) {
-        console.error('Additional deposit failed:', depositErr)
+      } catch (err) {
+        console.error('Failed to copy address:', err)
         this.$q.notify({
           type: 'negative',
-          message: `RAW ERROR: ${JSON.stringify(depositErr, null, 2)}`,
-          timeout: 15000,
-          html: true,
+          message: 'Failed to copy address. Please select and copy manually.',
+          timeout: 3000,
         })
-      } finally {
-        this.depositing = false
       }
     },
 
@@ -660,6 +734,21 @@ export default defineComponent({
             message: `Withdrawal successful! Vault will be removed.${result.amountSatoshis ? ` (${result.amountSatoshis} sats)` : ''}`,
             icon: 'check_circle',
           })
+
+          // ✅ Log withdrawal activity
+          try {
+            const { activityLogApi } = await import('src/services/activity-log-api.js')
+            await activityLogApi.logWithdrawal({
+              vaultId: this.vault._id,
+              vaultName: this.vault.name || 'Unnamed Vault',
+              contractAddress: this.vault.contractAddress,
+              amountSatoshis: result.amountSatoshis || this.vault.balance || 0,
+              txHash: result.txHash,
+            })
+            console.log('✅ Withdrawal activity logged')
+          } catch (logError) {
+            console.warn('⚠️ Failed to log withdrawal activity:', logError)
+          }
 
           // ✅ Delete vault from backend and localStorage
           if (this.vault) {

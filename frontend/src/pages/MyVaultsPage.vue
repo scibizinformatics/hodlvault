@@ -231,9 +231,46 @@
 
         <q-separator />
 
+        <!-- ✅ Activity Filters -->
+        <q-card-section>
+          <div class="row q-gutter-md q-mb-md">
+            <!-- Time Filter -->
+            <div class="col-12 col-sm-6">
+              <label class="text-caption text-grey-6 q-mb-xs block">Time Period</label>
+              <q-select
+                v-model="timeFilter"
+                :options="timeFilterOptions"
+                outlined
+                dense
+                dark
+                emit-value
+                map-options
+                @update:model-value="onFilterChange"
+              />
+            </div>
+
+            <!-- Activity Type Filter -->
+            <div class="col-12 col-sm-6">
+              <label class="text-caption text-grey-6 q-mb-xs block">Activity Type</label>
+              <q-select
+                v-model="activityTypeFilter"
+                :options="activityTypeOptions"
+                outlined
+                dense
+                dark
+                emit-value
+                map-options
+                @update:model-value="onFilterChange"
+              />
+            </div>
+          </div>
+        </q-card-section>
+
+        <q-separator />
+
         <q-card-section class="q-pa-none" style="max-height: 70vh; overflow-y: auto">
-          <q-list v-if="activityLogs.length > 0">
-            <q-item v-for="log in activityLogs" :key="log._id" class="activity-item">
+          <q-list v-if="filteredActivityLogs.length > 0">
+            <q-item v-for="log in filteredActivityLogs" :key="log._id" class="activity-item">
               <q-item-section avatar>
                 <q-icon
                   :name="getActivityIcon(log.activityType)"
@@ -278,8 +315,8 @@
 
           <div v-else class="text-center q-pa-lg text-grey-6">
             <q-icon name="history" size="48px" class="q-mb-sm" />
-            <p>No activity history yet</p>
-            <p class="text-caption">Your vault operations will appear here</p>
+            <p>No activity found for selected filters</p>
+            <p class="text-caption">Try adjusting your time period or activity type filters</p>
           </div>
 
           <!-- Load More -->
@@ -320,12 +357,81 @@ export default defineComponent({
       logsSkip: 0,
       logsLimit: 20,
       hasMoreLogs: false,
+      // ✅ Activity log filters
+      timeFilter: 'all', // today, yesterday, thisWeek, thisMonth, thisYear, all
+      activityTypeFilter: 'all', // all, deposits, withdrawals
     }
   },
 
   computed: {
     connectedAddress() {
       return this.$store.state.wallet?.address ?? null
+    },
+
+    timeFilterOptions() {
+      return [
+        { label: 'All Time', value: 'all' },
+        { label: 'Today', value: 'today' },
+        { label: 'Yesterday', value: 'yesterday' },
+        { label: 'This Week', value: 'thisWeek' },
+        { label: 'This Month', value: 'thisMonth' },
+        { label: 'This Year', value: 'thisYear' },
+      ]
+    },
+
+    activityTypeOptions() {
+      return [
+        { label: 'All Activities', value: 'all' },
+        { label: 'Deposits Only', value: 'deposits' },
+        { label: 'Withdrawals Only', value: 'withdrawals' },
+      ]
+    },
+
+    filteredActivityLogs() {
+      let filtered = [...this.activityLogs]
+
+      // Filter by time period
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const yesterday = new Date(today)
+      yesterday.setDate(yesterday.getDate() - 1)
+      const thisWeek = new Date(today)
+      thisWeek.setDate(thisWeek.getDate() - 7)
+      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const thisYear = new Date(now.getFullYear(), 0, 1)
+
+      switch (this.timeFilter) {
+        case 'today':
+          filtered = filtered.filter((log) => new Date(log.timestamp) >= today)
+          break
+        case 'yesterday':
+          filtered = filtered.filter((log) => {
+            const logDate = new Date(log.timestamp)
+            return logDate >= yesterday && logDate < today
+          })
+          break
+        case 'thisWeek':
+          filtered = filtered.filter((log) => new Date(log.timestamp) >= thisWeek)
+          break
+        case 'thisMonth':
+          filtered = filtered.filter((log) => new Date(log.timestamp) >= thisMonth)
+          break
+        case 'thisYear':
+          filtered = filtered.filter((log) => new Date(log.timestamp) >= thisYear)
+          break
+      }
+
+      // Filter by activity type
+      switch (this.activityTypeFilter) {
+        case 'deposits':
+          filtered = filtered.filter((log) => log.activityType === 'DEPOSIT')
+          break
+        case 'withdrawals':
+          filtered = filtered.filter((log) => log.activityType === 'WITHDRAWAL')
+          break
+      }
+
+      return filtered
     },
   },
 
@@ -632,6 +738,15 @@ export default defineComponent({
       } catch (error) {
         console.error('Failed to refresh vault balances:', error)
       }
+    },
+
+    onFilterChange() {
+      // When filters change, just recompute filteredActivityLogs
+      // The computed property handles the filtering automatically
+      console.log('Filters changed:', {
+        timeFilter: this.timeFilter,
+        activityTypeFilter: this.activityTypeFilter,
+      })
     },
 
     async loadActivityHistory() {

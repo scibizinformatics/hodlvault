@@ -1,5 +1,0 @@
-$kind: http-request
-name: register
-url: ''
-method: GET
-# order: null

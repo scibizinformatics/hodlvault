@@ -2,6 +2,37 @@ import { ActivityLog } from '../models/activity-log.model.js'
 
 export async function logActivity(data) {
   try {
+    // Prevent duplicate logs
+    if (data.vaultId && data.activityType) {
+      let existingLog = null
+
+      // For withdrawals: check by txHash
+      if (data.details?.txHash) {
+        existingLog = await ActivityLog.findOne({
+          vaultId: data.vaultId,
+          activityType: data.activityType,
+          'details.txHash': data.details.txHash,
+        })
+      }
+      // For deposits (no txHash): check for recent duplicate within 10 seconds
+      else if (data.activityType === 'DEPOSIT' && data.details?.amountSatoshis) {
+        const tenSecondsAgo = new Date(Date.now() - 10000)
+        existingLog = await ActivityLog.findOne({
+          vaultId: data.vaultId,
+          activityType: 'DEPOSIT',
+          'details.amountSatoshis': data.details.amountSatoshis,
+          timestamp: { $gte: tenSecondsAgo },
+        })
+      }
+
+      if (existingLog) {
+        console.log(
+          `⚠️ Duplicate activity log skipped: ${data.activityType} for vault ${data.vaultId}`,
+        )
+        return existingLog
+      }
+    }
+
     const log = new ActivityLog({
       walletAddress: data.walletAddress.toLowerCase(),
       activityType: data.activityType,

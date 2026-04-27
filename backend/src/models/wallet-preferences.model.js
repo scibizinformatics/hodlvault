@@ -32,7 +32,7 @@ const walletPreferencesSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 )
 
 // Static method to find preferences by wallet address
@@ -43,9 +43,9 @@ walletPreferencesSchema.statics.findByWalletAddress = function (walletAddress) {
 // Static method to get or create preferences
 walletPreferencesSchema.statics.getOrCreate = async function (walletAddress) {
   const normalizedAddress = walletAddress.toLowerCase()
-  
+
   let preferences = await this.findOne({ walletAddress: normalizedAddress })
-  
+
   if (!preferences) {
     preferences = new this({
       walletAddress: normalizedAddress,
@@ -58,30 +58,30 @@ walletPreferencesSchema.statics.getOrCreate = async function (walletAddress) {
     })
     await preferences.save()
   }
-  
+
   return preferences
 }
 
 // Static method to update preferences
 walletPreferencesSchema.statics.updatePreferences = async function (walletAddress, newPreferences) {
   const normalizedAddress = walletAddress.toLowerCase()
-  
+
   // Allowed preference fields
   const allowedFields = ['autoWithdrawal', 'notifications', 'defaultOracle', 'theme']
   const updateData = {}
-  
+
   allowedFields.forEach((field) => {
     if (newPreferences[field] !== undefined) {
       updateData[`preferences.${field}`] = newPreferences[field]
     }
   })
-  
+
   const preferences = await this.findOneAndUpdate(
     { walletAddress: normalizedAddress },
     { $set: updateData },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { new: true, upsert: true, setDefaultsOnInsert: true },
   )
-  
+
   return preferences
 }
 

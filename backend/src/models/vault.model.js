@@ -52,6 +52,10 @@ const vaultSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    autoWithdrawal: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ['active', 'withdrawn', 'expired'],
@@ -69,6 +73,7 @@ const vaultSchema = new mongoose.Schema(
 // Compound indexes for common queries
 vaultSchema.index({ walletAddress: 1, status: 1 })
 vaultSchema.index({ walletAddress: 1, createdAt: -1 })
+vaultSchema.index({ autoWithdrawal: 1, status: 1 })
 
 // Virtual for formatted balance in BCH
 vaultSchema.virtual('balanceBCH').get(function () {

@@ -17,6 +17,7 @@ export const createVault = async (req, res) => {
       originalFundingAddress,
       vaultSalt,
       name,
+      autoWithdrawal,
     } = req.body
 
     // Debug logging to diagnose vault save failures
@@ -68,6 +69,7 @@ export const createVault = async (req, res) => {
         existingVault.originalFundingAddress = originalFundingAddress
         existingVault.vaultSalt = vaultSalt
         existingVault.name = name
+        existingVault.autoWithdrawal = !!autoWithdrawal
         existingVault.updatedAt = new Date()
 
         await existingVault.save()
@@ -100,6 +102,7 @@ export const createVault = async (req, res) => {
       originalFundingAddress,
       vaultSalt,
       name: name || '',
+      autoWithdrawal: !!autoWithdrawal,
     })
 
     await vault.save()

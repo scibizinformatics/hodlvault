@@ -141,29 +141,29 @@
                 <!-- Auto-Withdrawal Option -->
                 <div class="q-mb-lg">
                   <q-toggle
-                    v-model="enableAutoWithdrawal"
+                    v-model="autoWithdrawal"
                     label="Enable Auto-Withdrawal (Create, Fund, Forget)"
                     color="primary"
                     size="lg"
                     class="text-grey-4"
                   >
                     <q-tooltip>
-                      Automatically withdraw funds when price target is met. Requires pre-signing
-                      multiple transactions.
+                      Automatically withdraw funds when price target is met. The server monitors
+                      oracle prices and executes the withdrawal for you.
                     </q-tooltip>
                   </q-toggle>
 
-                  <div v-if="enableAutoWithdrawal" class="q-mt-sm">
+                  <div v-if="autoWithdrawal" class="q-mt-sm">
                     <q-banner class="bg-primary text-black">
                       <template v-slot:avatar>
                         <q-icon name="auto_awesome" />
                       </template>
                       <div class="text-body2">
                         <strong>Create, Fund, Forget Mode:</strong><br />
-                        • Pre-sign withdrawal transactions for multiple price targets<br />
-                        • System automatically monitors price and executes withdrawal<br />
-                        • No manual action required when target is met<br />
-                        • You'll be asked to sign multiple transactions during vault creation
+                        • Server monitors oracle prices 24/7<br />
+                        • Automatically executes withdrawal when price target is reached<br />
+                        • No manual action required — works even when you're offline<br />
+                        • Funds are sent to your wallet address via covenant contract
                       </div>
                     </q-banner>
                   </div>
@@ -230,8 +230,6 @@ import {
 } from 'src/services/blockchain'
 import { fetchOraclePrice, ORACLE_PUBKEY } from 'src/services/oracle'
 import { hash160, hexToBin, binToHex } from '@bitauth/libauth'
-import { autoWithdrawalService } from 'src/services/auto-withdrawal'
-import { preSigningService } from 'src/services/pre-signing'
 import { vaultStorage } from 'src/services/vault-storage'
 
 export default defineComponent({
@@ -270,9 +268,8 @@ export default defineComponent({
 
       balanceRefreshing: false,
 
-      // Pre-signing functionality
-      preSigning: false,
-      enableAutoWithdrawal: false,
+      // Auto-withdrawal toggle (server-side execution)
+      autoWithdrawal: false,
     }
   },
 
@@ -567,6 +564,7 @@ export default defineComponent({
           balance: Number(balance),
           createdAt: Date.now(),
           name: vaultName, // Use the same name
+          autoWithdrawal: this.autoWithdrawal, // Server-side auto-withdrawal
         })
 
         this.$q.notify({
@@ -579,10 +577,7 @@ export default defineComponent({
         console.log('To lock funds, send', this.form.amount, 'satoshis to:', contractAddress)
         console.log('Vault salt:', vaultSalt)
 
-        // NEW: Pre-signing for auto-withdrawal
-        if (this.enableAutoWithdrawal) {
-          await this.preSignWithdrawals()
-        }
+        // Auto-withdrawal is handled server-side — just pass the flag to vaultStorage
 
         // ✅ Start rapid deposit confirmation polling (professional UX)
         this.startDepositConfirmationPolling()
@@ -723,7 +718,7 @@ export default defineComponent({
           vaultId: this.vault._id,
           vaultName: this.vault.name || 'Unnamed Vault',
           contractAddress: this.vault.contractAddress,
-          amountSatoshis: amountSatoshis,
+          amountSatoshis: Number(amountSatoshis),
           txHash: null,
         })
         console.log('✅ Deposit activity logged:', amountSatoshis, 'satoshis')
@@ -759,38 +754,8 @@ export default defineComponent({
           if (numeric > 0) {
             clearInterval(this.depositPollInterval)
             this.depositPollInterval = null
-
-            // ✅ Log initial deposit activity
-            console.log('📝 Attempting to log deposit activity:', {
-              vaultId: this.vault?._id,
-              vaultName: this.vault?.name,
-              contractAddress: this.vault?.contractAddress,
-              amountSatoshis: numeric,
-            })
-            try {
-              const { activityLogApi } = await import('src/services/activity-log-api.js')
-              const result = await activityLogApi.logDeposit({
-                vaultId: this.vault._id,
-                vaultName: this.vault.name || 'Unnamed Vault',
-                contractAddress: this.vault.contractAddress,
-                amountSatoshis: numeric,
-                txHash: null,
-              })
-              console.log('✅ Initial deposit activity logged:', result)
-            } catch (logError) {
-              console.error(
-                '❌ Failed to log deposit activity:',
-                logError.message,
-                logError.response?.data,
-              )
-              this.$q.notify({
-                type: 'warning',
-                message:
-                  'Deposit confirmed but activity log failed: ' +
-                  (logError.message || 'Unknown error'),
-                timeout: 5000,
-              })
-            }
+            // Deposit logging is handled by startDepositConfirmationPolling
+            // after user confirms the deposit transaction
           } else if (elapsed >= 120000) {
             clearInterval(this.depositPollInterval)
             this.depositPollInterval = null
@@ -804,66 +769,6 @@ export default defineComponent({
           }
         }
       }, 5000)
-    },
-
-    /**
-     * Pre-sign withdrawal transactions for automated withdrawals
-     */
-    async preSignWithdrawals() {
-      if (!this.vault || !this.enableAutoWithdrawal) return
-
-      this.preSigning = true
-      try {
-        const wc = this.$walletConnect
-        if (!wc || !wc.isConnected()) {
-          throw new Error('Wallet not connected for pre-signing')
-        }
-
-        this.$q.notify({
-          type: 'info',
-          message: 'Preparing pre-signed transactions for auto-withdrawal...',
-          icon: 'settings',
-        })
-
-        // Generate pre-signed transactions for various price targets
-        const transactions = await preSigningService.generatePreSignedTransactions(
-          this.vault,
-          (method, params) => wc.request(method, params),
-          this.$store,
-        )
-
-        if (transactions.length > 0) {
-          this.$q.notify({
-            type: 'positive',
-            message: `Successfully pre-signed ${transactions.length} withdrawal transactions!`,
-            icon: 'check_circle',
-          })
-
-          // Add vault to auto-withdrawal monitoring
-          autoWithdrawalService.addVault(this.vault)
-
-          // Start monitoring if not already running
-          autoWithdrawalService.startMonitoring()
-
-          console.log(
-            `Pre-signed ${transactions.length} transactions for vault ${this.vault.contractAddress}`,
-          )
-        } else {
-          throw new Error('No pre-signed transactions were created')
-        }
-      } catch (error) {
-        console.error('Pre-signing failed:', error)
-        this.$q.notify({
-          type: 'negative',
-          message: `Pre-signing failed: ${error.message}`,
-          icon: 'error',
-        })
-
-        // Disable auto-withdrawal if pre-signing failed
-        this.enableAutoWithdrawal = false
-      } finally {
-        this.preSigning = false
-      }
     },
 
     /**
@@ -922,9 +827,6 @@ export default defineComponent({
       // Load existing vault from legacy system
       this.loadPersistedVaultState()
     }
-
-    // Initialize auto-withdrawal service with Vuex store
-    autoWithdrawalService.init(this.$store)
 
     // Start price monitoring
     this.refreshPrice()

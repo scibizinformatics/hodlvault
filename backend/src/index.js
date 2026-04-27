@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import connectDB from './config/database.js'
 import app from './app.js'
+import { startAutoWithdrawalCron } from './services/auto-withdrawal-cron.js'
 
 dotenv.config({
   path: '../.env',
@@ -14,6 +15,13 @@ const startServer = async () => {
   } catch (err) {
     console.log('⚠️ MongoDB connection failed - starting in mock mode', err.message)
     console.log('   Note: Data will not persist. Fix MongoDB for production use.')
+  }
+
+  // Start auto-withdrawal cron job (monitors oracle prices every 2 min)
+  try {
+    startAutoWithdrawalCron()
+  } catch (err) {
+    console.warn('⚠️ Auto-withdrawal cron failed to start:', err.message)
   }
 
   app.on('error', (error) => {

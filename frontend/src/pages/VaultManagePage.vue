@@ -267,15 +267,16 @@
                 </div>
 
                 <!-- Auto-Withdrawal Status -->
-                <div v-if="enableAutoWithdrawal" class="q-mt-md">
+                <div v-if="vault && vault.autoWithdrawal" class="q-mt-md">
                   <q-banner class="bg-positive text-white">
                     <template v-slot:avatar>
                       <q-icon name="auto_awesome" />
                     </template>
                     <div class="text-body2">
                       <strong>Auto-Withdrawal Active</strong><br />
-                      • System will automatically withdraw when price target is met<br />
-                      • No manual action required<br />
+                      • Server monitors oracle prices 24/7<br />
+                      • Automatically withdraws when price target is reached<br />
+                      • Works even when you're offline<br />
                       • Funds will return to: {{ vault.originalFundingAddress }}
                     </div>
                   </q-banner>
@@ -338,7 +339,6 @@ export default defineComponent({
         oracle_pubkey_hex: '',
       },
       balanceRefreshing: false,
-      enableAutoWithdrawal: false,
       showQRCode: false, // ✅ QR code hidden by default until user clicks button
       depositPollTimeout: null, // Track rapid polling timeout for cleanup
     }
@@ -456,6 +456,7 @@ export default defineComponent({
           oraclePkHex: vaultData.oraclePkHex,
           contract,
           originalFundingAddress: vaultData.originalFundingAddress,
+          autoWithdrawal: !!vaultData.autoWithdrawal, // ✅ Auto-withdrawal flag from backend
         }
 
         this.refreshVaultBalance()

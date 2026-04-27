@@ -110,6 +110,17 @@
                   <div class="col">
                     <div class="text-h6 text-weight-bold text-white q-mb-sm">
                       {{ vault.name || `Vault #${vault.contractAddress.slice(-8)}` }}
+                      <q-badge
+                        v-if="vault.autoWithdrawal"
+                        color="positive"
+                        label="Auto"
+                        class="q-ml-sm"
+                      >
+                        <q-tooltip
+                          >Auto-withdrawal enabled — server will withdraw when target is
+                          reached</q-tooltip
+                        >
+                      </q-badge>
                     </div>
 
                     <div class="row q-gutter-md text-body2">

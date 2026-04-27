@@ -1,0 +1,70 @@
+{
+  "contractName": "HodlVault",
+  "constructorInputs": [
+    {
+      "name": "ownerPkh",
+      "type": "bytes20"
+    },
+    {
+      "name": "oraclePk",
+      "type": "pubkey"
+    },
+    {
+      "name": "priceTarget",
+      "type": "int"
+    }
+  ],
+  "abi": [
+    {
+      "name": "spend",
+      "inputs": [
+        {
+          "name": "oracleMessage",
+          "type": "bytes"
+        },
+        {
+          "name": "oracleSig",
+          "type": "datasig"
+        }
+      ]
+    }
+  ],
+  "bytecode": "OP_4 OP_ROLL OP_4 OP_PICK OP_3 OP_ROLL OP_CHECKDATASIGVERIFY OP_2 OP_PICK OP_SIZE OP_NIP OP_8 OP_GREATERTHANOREQUAL OP_VERIFY OP_ROT OP_8 OP_SPLIT OP_DROP OP_BIN2NUM OP_ROT OP_GREATERTHANOREQUAL OP_VERIFY e803 OP_INPUTINDEX OP_UTXOVALUE OP_SWAP OP_SUB OP_TXOUTPUTCOUNT OP_1 OP_NUMEQUALVERIFY OP_0 OP_OUTPUTVALUE OP_NUMEQUALVERIFY 76a914 OP_SWAP OP_CAT 88ac OP_CAT OP_0 OP_OUTPUTBYTECODE OP_EQUAL",
+  "source": "pragma cashscript ^0.11.0;\n\n/**\n * HodlVault: BCH contract that locks funds until a price target is met.\n * Withdrawal requires:\n * - Valid Oracle data signature (checkDataSig) over a message containing the price.\n * - Valid transaction signature from the owner (checkSig).\n * - Price in the oracle message >= priceTarget.\n * - Covenant: the only output sends the full balance (minus 1000 sats fee) to ownerPkh.\n *\n * Oracle message format: first 8 bytes = price (int, script number encoding).\n * The Django backend signs (price + blockheight); for this contract only the\n * first 8 bytes (price) are checked against priceTarget.\n */\ncontract HodlVault(bytes20 ownerPkh, pubkey oraclePk, int priceTarget) {\n  function spend(\n    bytes oracleMessage,\n    datasig oracleSig\n  ) {\n    // 2. Oracle must have signed the message (checkDataSig)\n    require(checkDataSig(oracleSig, oracleMessage, oraclePk));\n\n    // 3. Price in the oracle message must be >= priceTarget\n    require(oracleMessage.length >= 8);\n    bytes priceBytes = oracleMessage.split(8)[0];\n    require(int(priceBytes) >= priceTarget);\n\n    // 4. Covenant: exactly one output, full balance minus 1000 sats to owner P2PKH\n    int minerFee = 1000;\n    int amount = tx.inputs[this.activeInputIndex].value - minerFee;\n    require(tx.outputs.length == 1);\n    require(tx.outputs[0].value == amount);\n    bytes25 ownerLock = new LockingBytecodeP2PKH(ownerPkh);\n    require(tx.outputs[0].lockingBytecode == ownerLock);\n  }\n}\n",
+  "debug": {
+    "bytecode": "547a5479537abb5279827758a2697b587f75817ba26902e803c0c67c94c4519d00cc9d0376a9147c7e0288ac7e00cd87",
+    "sourceMap": "21:25:21:34;;:36::49;;:51::59;;:4::62:1;24:12:24:25:0;;:::32:1;;:36::37:0;:12:::1;:4::39;25:23:25:36:0;:43::44;:23::45:1;:::48;26:12:26:27;:31::42:0;:12:::1;:4::44;29:19:29:23:0;30:27:30:48;:17::55:1;:58::66:0;:17:::1;31:12:31:29:0;:33::34;:4::36:1;32:23:32:24:0;:12::31:1;:4::43;33:24:33:58:0;:49::57;:24::58:1;;;34:23:34:24:0;:12::41:1;:4::56",
+    "logs": [],
+    "requires": [
+      {
+        "ip": 9,
+        "line": 21
+      },
+      {
+        "ip": 16,
+        "line": 24
+      },
+      {
+        "ip": 24,
+        "line": 26
+      },
+      {
+        "ip": 32,
+        "line": 31
+      },
+      {
+        "ip": 35,
+        "line": 32
+      },
+      {
+        "ip": 44,
+        "line": 34
+      }
+    ]
+  },
+  "compiler": {
+    "name": "cashc",
+    "version": "0.11.5"
+  },
+  "updatedAt": "2026-03-27T08:51:45.105Z"
+}

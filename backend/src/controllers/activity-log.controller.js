@@ -118,7 +118,7 @@ export const logDepositActivity = async (req, res) => {
 
     res.status(200).json({ success: true, log })
   } catch (error) {
-    console.error('Log deposit activity error:', error)
-    res.status(500).json({ success: false, message: 'Failed to log deposit' })
+    console.error('Log deposit activity error:', error.message, error.errors || '')
+    res.status(500).json({ success: false, message: 'Failed to log deposit', error: error.message })
   }
 }

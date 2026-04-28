@@ -56,3 +56,32 @@ export async function getAddressBalance(address) {
 
   throw new Error(`Failed to get balance: ${lastError?.message || 'Unknown error'}`)
 }
+
+/**
+ * Get UTXOs for an address (includes transaction IDs for deposit tracking)
+ * @param {string} address - Bitcoin Cash address
+ * @returns {Promise<Array<{txid: string, vout: number, satoshis: number}>>} UTXOs
+ */
+export async function getAddressUtxos(address) {
+  if (!address) throw new Error('Address is required')
+
+  const network = inferNetworkFromAddress(address)
+  const hostnames = [null, ...getFallbackHostnames(network)]
+  let lastError = null
+
+  for (const hostname of hostnames) {
+    try {
+      const provider = getQueryProvider(network, hostname)
+      const utxos = await provider.getUtxos(address)
+      return utxos.map((u) => ({
+        txid: u.txid,
+        vout: u.vout,
+        satoshis: Number(u.satoshis),
+      }))
+    } catch (e) {
+      lastError = e
+    }
+  }
+
+  throw new Error(`Failed to get UTXOs: ${lastError?.message || 'Unknown error'}`)
+}

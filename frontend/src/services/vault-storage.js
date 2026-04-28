@@ -316,28 +316,12 @@ class VaultStorageService {
     // Ensure balance is a Number (not BigInt) for JSON serialization
     const balanceNumber = Number(balance)
 
-    // Check if this is a new deposit (balance increased)
+    // Note: Deposit logging is now handled entirely by backend via SSE
+    // Frontend only updates balance, backend logs and emits deposit events
+
+    // Get vault info for localStorage update
     const vaults = this.getAllVaultsLocal()
     const vaultIndex = vaults.findIndex((v) => v.contractAddress === contractAddress)
-    const oldBalance = vaultIndex >= 0 ? vaults[vaultIndex].balance : 0
-    const depositAmount = balanceNumber - oldBalance
-
-    // If balance increased, log as deposit activity
-    if (depositAmount > 0 && vaultIndex >= 0) {
-      const vault = vaults[vaultIndex]
-      console.log('💰 Detected deposit via balance increase:', {
-        contractAddress,
-        oldBalance,
-        newBalance: balanceNumber,
-        depositAmount,
-        vaultName: vault.name,
-      })
-
-      // Log deposit activity (fire and forget - don't block balance update)
-      this.logDepositActivity(vault, depositAmount).catch((err) => {
-        console.warn('Failed to log deposit activity:', err)
-      })
-    }
 
     // Try backend first if enabled
     if (this.useBackend) {
@@ -368,25 +352,7 @@ class VaultStorageService {
     }
   }
 
-  /**
-   * Log deposit activity (helper method)
-   * @private
-   */
-  async logDepositActivity(vault, amountSatoshis) {
-    try {
-      const { activityLogApi } = await import('./activity-log-api.js')
-      await activityLogApi.logDeposit({
-        vaultId: vault._id || vault.id,
-        vaultName: vault.name || 'Unnamed Vault',
-        contractAddress: vault.contractAddress,
-        amountSatoshis: amountSatoshis,
-        txHash: null, // Balance polling doesn't have txHash
-      })
-      console.log('✅ Deposit activity logged from balance update:', amountSatoshis, 'satoshis')
-    } catch (error) {
-      console.warn('⚠️ Failed to log deposit activity from balance update:', error.message)
-    }
-  }
+  // Note: logDepositActivity removed - backend handles all deposit logging via SSE
 
   /**
    * Delete a vault

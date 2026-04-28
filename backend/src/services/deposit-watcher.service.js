@@ -1,4 +1,4 @@
-import { getAddressBalance } from '../utils/blockchain.js'
+import { getAddressBalance, getAddressUtxos } from '../utils/blockchain.js'
 import { logActivity } from './activity-log.service.js'
 
 // Store expected deposits: Map<contractAddress, depositInfo>
@@ -19,6 +19,7 @@ export function watchForDeposit(depositInfo) {
   expectedDeposits.set(contractAddress, {
     ...depositInfo,
     initialBalance: 0,
+    initialUtxos: [], // Store initial UTXOs to detect new ones
     startTime: Date.now(),
     expiresAt: Date.now() + 120000, // 2 minute timeout
   })
@@ -54,25 +55,38 @@ export async function checkExpectedDeposits() {
     }
 
     try {
-      const currentBalance = await getAddressBalance(contractAddress)
-      const numericBalance = Number(currentBalance)
+      // Get current UTXOs (includes transaction IDs)
+      const currentUtxos = await getAddressUtxos(contractAddress)
+      const numericBalance = currentUtxos.reduce((sum, u) => sum + u.satoshis, 0)
 
-      // First check - store initial balance
+      // First check - store initial balance and UTXOs
       if (depositInfo.initialBalance === undefined) {
         depositInfo.initialBalance = numericBalance
-        console.log(`[DepositWatcher] Initial balance for ${contractAddress}: ${numericBalance}`)
+        depositInfo.initialUtxos = currentUtxos
+        console.log(
+          `[DepositWatcher] Initial balance for ${contractAddress}: ${numericBalance} (${currentUtxos.length} UTXOs)`,
+        )
         continue
       }
 
-      // Check for deposit
-      if (numericBalance > depositInfo.initialBalance) {
-        const depositAmount = numericBalance - depositInfo.initialBalance
+      // Check for deposit by comparing UTXOs
+      const currentUtxoSet = new Set(currentUtxos.map((u) => `${u.txid}:${u.vout}`))
+      const initialUtxoSet = new Set(depositInfo.initialUtxos.map((u) => `${u.txid}:${u.vout}`))
+
+      // Find new UTXOs (deposits)
+      const newUtxos = currentUtxos.filter((u) => !initialUtxoSet.has(`${u.txid}:${u.vout}`))
+
+      if (newUtxos.length > 0) {
+        // Use the first new UTXO's txid as the deposit transaction
+        // (Multiple new UTXOs could be from same tx or different txs)
+        const depositTx = newUtxos[0]
+        const depositAmount = newUtxos.reduce((sum, u) => sum + u.satoshis, 0)
 
         console.log(
-          `[DepositWatcher] ✅ Deposit detected! ${contractAddress}: +${depositAmount} sats`,
+          `[DepositWatcher] ✅ Deposit detected! ${contractAddress}: +${depositAmount} sats (tx: ${depositTx.txid})`,
         )
 
-        // Log the activity
+        // Log the activity with transaction hash
         await logActivity({
           walletAddress: depositInfo.walletAddress,
           activityType: 'DEPOSIT',
@@ -83,7 +97,7 @@ export async function checkExpectedDeposits() {
             amountSatoshis: depositAmount,
             amountBCH: depositAmount / 100000000,
             newBalance: numericBalance,
-            txHash: null,
+            txHash: depositTx.txid, // Now we have the transaction hash!
           },
         })
 

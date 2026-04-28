@@ -207,24 +207,22 @@ export async function spendVault(
       throw new Error('No UTXOs available to spend from the vault')
     }
 
-    // Prefer the largest UTXO so we are less likely to hit the
-    // "insufficient balance for fee" edge case on very small UTXOs.
-    const utxo = utxos.reduce(
-      (best, current) => (!best || current.satoshis > best.satoshis ? current : best),
-      null,
-    )
+    // Support multiple deposits: combine ALL UTXOs
+    console.log(`DEBUG: Found ${utxos.length} UTXO(s) for withdrawal`)
 
-    // Conservative but smaller miner fee; the TransactionBuilder will still
-    // compute final size-based fee when broadcasting.
+    // Calculate total balance from all UTXOs
+    const totalSatoshis = utxos.reduce((sum, u) => sum + BigInt(u.satoshis), 0n)
     const minerFee = 1000n
-    const amount = utxo.satoshis - minerFee
+    const amount = totalSatoshis - minerFee
+
     if (amount <= 0n) {
       throw new Error('Insufficient balance to cover miner fee')
     }
 
     console.log('DEBUG: Vault withdrawal parameters:', {
       contractAddress: contract.address,
-      utxoSatoshis: utxo.satoshis.toString(),
+      utxoCount: utxos.length,
+      totalSatoshis: totalSatoshis.toString(),
       amountToSend: amount.toString(),
       ownerAddress,
       ownerPkHex: ownerPkHex ? 'present' : 'missing',
@@ -240,10 +238,15 @@ export async function spendVault(
     const ownerPk = useWalletConnect ? placeholderPublicKey() : hexToBin(ownerPkHex)
     const ownerSig = useWalletConnect ? placeholderSignature() : ownerSigTemplate
 
+    // Build transaction with ALL UTXOs as inputs (supports multiple deposits)
     const txBuilder = new TransactionBuilder({ provider })
-      .addInput(utxo, contract.unlock.spend(ownerPk, ownerSig, oracleMessage, oracleSig))
-      .addOutput({ to: ownerAddress, amount })
-      .setLocktime(0)
+
+    // Add all UTXOs as inputs
+    for (const utxo of utxos) {
+      txBuilder.addInput(utxo, contract.unlock.spend(ownerPk, ownerSig, oracleMessage, oracleSig))
+    }
+
+    txBuilder.addOutput({ to: ownerAddress, amount }).setLocktime(0)
 
     if (useWalletConnect) {
       console.log('DEBUG: Using WalletConnect for signing...')
@@ -285,7 +288,7 @@ export async function spendVault(
               'bch_signTransaction',
               serializedPayload,
               contract.address,
-              utxo.satoshis,
+              totalSatoshis,
             )
           },
 

@@ -92,24 +92,21 @@ async function executeAutoWithdrawal(vault, oracleData) {
       return { success: false, error: 'No UTXOs found — vault may already be empty' }
     }
 
-    // Use the largest UTXO
-    const utxo = utxos.reduce((best, current) =>
-      current.satoshis > best.satoshis ? current : best,
-    )
+    console.log(`[AutoWithdraw] Found ${utxos.length} UTXO(s) for vault ${vault.contractAddress}`)
 
-    // Convert satoshis to BigInt for consistent type handling
-    const utxoSatoshis = BigInt(utxo.satoshis)
+    // Calculate total balance from ALL UTXOs (supports multiple deposits)
+    const totalSatoshis = utxos.reduce((sum, u) => sum + BigInt(u.satoshis), 0n)
     const minerFee = BigInt(MINER_FEE)
 
-    // Validate balance covers the fee
-    if (utxoSatoshis <= minerFee) {
+    // Validate total balance covers the fee
+    if (totalSatoshis <= minerFee) {
       console.warn(
-        `[AutoWithdraw] Balance too low (${utxo.satoshis} sats) for vault ${vault.contractAddress}`,
+        `[AutoWithdraw] Total balance too low (${totalSatoshis} sats) for vault ${vault.contractAddress}`,
       )
-      return { success: false, error: `Balance too low: ${utxo.satoshis} sats` }
+      return { success: false, error: `Balance too low: ${totalSatoshis} sats` }
     }
 
-    const amount = utxoSatoshis - minerFee
+    const amount = totalSatoshis - minerFee
 
     // The owner address to send funds to (from originalFundingAddress)
     const ownerAddress = vault.originalFundingAddress
@@ -119,12 +116,13 @@ async function executeAutoWithdrawal(vault, oracleData) {
     }
 
     // Build and broadcast the withdrawal transaction
-    // The contract's spend() function only needs oracleMessage + oracleSig
+    // Combine ALL UTXOs (multiple deposits) into a single transaction
     const oracleMessageBin = hexToBin(oracleData.messageHex)
     const oracleSigBin = hexToBin(oracleData.signatureHex)
 
     const txHex = await contract.functions
       .spend(oracleMessageBin, oracleSigBin)
+      .from(utxos) // Use all UTXOs as inputs (combines multiple deposits)
       .to([{ to: ownerAddress, amount: amount }])
       .withHardcodedFee(minerFee)
       .send()

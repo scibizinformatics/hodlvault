@@ -24,27 +24,30 @@ export async function paytacaOptimizedWithdrawal(
       console.error('❌ No UTXOs found - vault has no balance')
       return {
         success: false,
-        error: 'Vault has no balance to withdraw',
+        error: 'Vault has no balance to withdraw - it may have been auto-withdrawn already',
       }
     }
 
-    const utxo = utxos.reduce((best, current) =>
-      current.satoshis > best.satoshis ? current : best,
-    )
+    // ✅ Support multiple deposits: combine ALL UTXOs
+    const totalSatoshis = utxos.reduce((sum, u) => sum + BigInt(u.satoshis), 0n)
+    console.log(`💰 Total balance from ${utxos.length} UTXO(s): ${totalSatoshis} sats`)
 
-    // ✅ Validate: Check if balance is sufficient for fee
-    if (utxo.satoshis <= minerFee) {
-      console.error('❌ Balance too low to cover miner fee')
+    // ✅ Validate: Check if total balance is sufficient for fee
+    if (totalSatoshis <= minerFee) {
+      console.error('❌ Total balance too low to cover miner fee')
       return {
         success: false,
-        error: `Balance (${utxo.satoshis} sats) is too low to cover miner fee (${minerFee} sats)`,
+        error: `Total balance (${totalSatoshis} sats) is too low to cover miner fee (${minerFee} sats)`,
       }
     }
 
-    const amount = utxo.satoshis - minerFee
+    const amount = totalSatoshis - minerFee
     const oracleSigBin = hexToBin(oracleSigHex)
+
+    // ✅ Build transaction with ALL UTXOs as inputs (combines multiple deposits)
     const txHex = await contract.functions
       .spend(hexToBin(oracleMessageHex), oracleSigBin)
+      .from(utxos)
       .to([{ to: ownerAddress, amount: amount }])
       .withHardcodedFee(minerFee)
       .send()

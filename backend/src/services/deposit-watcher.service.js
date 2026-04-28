@@ -1,5 +1,6 @@
 import { getAddressBalance, getAddressUtxos } from '../utils/blockchain.js'
 import { logActivity } from './activity-log.service.js'
+import { Vault } from '../models/vault.model.js'
 
 // Store expected deposits: Map<contractAddress, depositInfo>
 const expectedDeposits = new Map()
@@ -83,8 +84,18 @@ export async function checkExpectedDeposits() {
         const depositAmount = newUtxos.reduce((sum, u) => sum + u.satoshis, 0)
 
         console.log(
-          `[DepositWatcher] ✅ Deposit detected! ${contractAddress}: +${depositAmount} sats (tx: ${depositTx.txid})`,
+          `[DepositWatcher] Deposit detected! ${contractAddress}: +${depositAmount} sats (tx: ${depositTx.txid})`,
         )
+
+        // Update vault balance in MongoDB (critical for auto-withdrawal to work)
+        try {
+          await Vault.findByIdAndUpdate(depositInfo.vaultId, {
+            $set: { balance: numericBalance },
+          })
+          console.log(`[DepositWatcher] Updated vault balance in MongoDB: ${numericBalance} sats`)
+        } catch (updateError) {
+          console.error('[DepositWatcher] Failed to update vault balance:', updateError.message)
+        }
 
         // Log the activity with transaction hash
         await logActivity({
@@ -101,8 +112,12 @@ export async function checkExpectedDeposits() {
           },
         })
 
-        // Stop watching this address
-        expectedDeposits.delete(contractAddress)
+        // Update the initial UTXOs to include this new deposit
+        // This allows detecting additional deposits to the same vault
+        depositInfo.initialUtxos = currentUtxos
+        console.log(
+          `[DepositWatcher] Updated watch for ${contractAddress} - waiting for more deposits`,
+        )
       }
     } catch (error) {
       console.error(`[DepositWatcher] Error checking ${contractAddress}:`, error.message)

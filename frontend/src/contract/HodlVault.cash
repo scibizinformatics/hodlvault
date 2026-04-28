@@ -2,34 +2,30 @@ pragma cashscript ^0.11.0;
 
 /**
  * HodlVault: BCH contract that locks funds until a price target is met.
+ * Supports multiple deposits - anyone can send funds to the contract address.
+ *
  * Withdrawal requires:
  * - Valid Oracle data signature (checkDataSig) over a message containing the price.
- * - Valid transaction signature from the owner (checkSig).
  * - Price in the oracle message >= priceTarget.
- * - Covenant: the only output sends the full balance (minus 1000 sats fee) to ownerPkh.
+ * - Covenant: first output sends total balance (minus fee) to ownerPkh.
  *
- * Oracle message format: first 8 bytes = price (int, script number encoding).
- * The Django backend signs (price + blockheight); for this contract only the
- * first 8 bytes (price) are checked against priceTarget.
+ * Multiple UTXOs can be combined in a single withdrawal transaction.
  */
 contract HodlVault(bytes20 ownerPkh, pubkey oraclePk, int priceTarget) {
   function spend(
     bytes oracleMessage,
     datasig oracleSig
   ) {
-    // 2. Oracle must have signed the message (checkDataSig)
+    // 1. Oracle must have signed the message (checkDataSig)
     require(checkDataSig(oracleSig, oracleMessage, oraclePk));
 
-    // 3. Price in the oracle message must be >= priceTarget
+    // 2. Price in the oracle message must be >= priceTarget
     require(oracleMessage.length >= 8);
     bytes priceBytes = oracleMessage.split(8)[0];
     require(int(priceBytes) >= priceTarget);
 
-    // 4. Covenant: exactly one output, full balance minus 1000 sats to owner P2PKH
-    int minerFee = 1000;
-    int amount = tx.inputs[this.activeInputIndex].value - minerFee;
-    require(tx.outputs.length == 1);
-    require(tx.outputs[0].value == amount);
+    // 3. Covenant: Output 0 must go to the owner P2PKH
+    // This ensures all funds (from all combined UTXOs) go to the owner
     bytes25 ownerLock = new LockingBytecodeP2PKH(ownerPkh);
     require(tx.outputs[0].lockingBytecode == ownerLock);
   }

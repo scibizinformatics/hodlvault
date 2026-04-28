@@ -412,6 +412,9 @@ export default defineComponent({
         amountSatoshis,
       })
 
+      // Disable withdraw button immediately to prevent race condition
+      this.withdrawing = true
+
       // Check if this is the current vault being viewed
       if (this.vault && this.vault.contractAddress === contractAddress) {
         // Update vault status immediately
@@ -720,6 +723,17 @@ export default defineComponent({
 
     async onWithdraw() {
       if (!this.canWithdraw || !this.vault) return
+
+      // Check if vault was already withdrawn (prevent race condition with auto-withdrawal)
+      if (this.vault.status === 'withdrawn' || this.vault.balance <= 0) {
+        this.$q.notify({
+          type: 'info',
+          message: 'Vault has already been withdrawn',
+          icon: 'info',
+        })
+        this.$router.push('/my-vaults')
+        return
+      }
 
       const wc = this.$walletConnect
       if (!wc || !wc.isConnected()) {

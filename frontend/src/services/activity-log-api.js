@@ -45,6 +45,23 @@ export const activityLogApi = {
     const response = await apiClient.post('/activity-logs/deposit', data)
     return response.data
   },
+
+  /**
+   * Tell backend to watch for a deposit (SSE-only approach)
+   * Backend will emit SSE when deposit is detected
+   */
+  async watchDeposit(data) {
+    const response = await apiClient.post('/deposit-watch/watch', data)
+    return response.data
+  },
+
+  /**
+   * Stop watching for a deposit
+   */
+  async stopWatchingDeposit(contractAddress) {
+    const response = await apiClient.delete(`/deposit-watch/watch/${contractAddress}`)
+    return response.data
+  },
 }
 
 export default activityLogApi

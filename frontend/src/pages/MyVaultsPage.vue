@@ -349,6 +349,7 @@
 <script>
 import { defineComponent } from 'vue'
 import { vaultStorage } from 'src/services/vault-storage'
+import { connectSSE, disconnectSSE } from 'src/services/sse.service'
 
 export default defineComponent({
   name: 'MyVaultsPage',
@@ -451,14 +452,67 @@ export default defineComponent({
     this.startSilentBalanceRefresh() // ✅ Start silent balance refresh (no blinking)
     this.fetchCurrentPrice()
     this.startBalancePolling()
+
+    // ✅ Connect to real-time SSE updates
+    connectSSE()
+
+    // Listen for vault withdrawal events
+    window.addEventListener('vault-withdrawn', this.handleVaultWithdrawn)
+
+    // Listen for new activity events (real-time activity history updates)
+    window.addEventListener('new-activity', this.handleNewActivity)
   },
 
   beforeUnmount() {
     this.stopBalancePolling()
     this.stopSilentBalanceRefresh() // ✅ Stop silent balance refresh
+
+    // ✅ Disconnect SSE and remove event listeners
+    disconnectSSE()
+    window.removeEventListener('vault-withdrawn', this.handleVaultWithdrawn)
+    window.removeEventListener('new-activity', this.handleNewActivity)
   },
 
   methods: {
+    /**
+     * Handle real-time vault withdrawal event from SSE
+     */
+    handleVaultWithdrawn(event) {
+      const { vaultId, contractAddress, amountSatoshis } = event.detail
+      console.log('[SSE] Vault withdrawn in real-time:', {
+        vaultId,
+        contractAddress,
+        amountSatoshis,
+      })
+
+      // Remove the withdrawn vault from the list immediately
+      this.vaults = this.vaults.filter((v) => v.contractAddress !== contractAddress)
+
+      // Show notification
+      this.$q.notify({
+        type: 'positive',
+        message: `Auto-withdrawal complete! ${(amountSatoshis / 100000000).toFixed(8)} BCH returned to your wallet`,
+        timeout: 5000,
+      })
+
+      // Refresh vaults from backend to ensure sync
+      setTimeout(() => this.loadVaults(), 1000)
+    },
+
+    /**
+     * Handle real-time new activity event from SSE
+     */
+    handleNewActivity(event) {
+      const { activity } = event.detail
+      console.log('[SSE] New activity received:', activity)
+
+      // Add new activity to the beginning of the list
+      if (this.showActivityHistory) {
+        this.activityLogs.unshift(activity)
+        console.log('[SSE] Activity history updated with new entry')
+      }
+    },
+
     async loadVaults() {
       this.loading = true
       try {

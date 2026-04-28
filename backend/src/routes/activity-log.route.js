@@ -9,6 +9,16 @@ import {
 
 const router = Router()
 
+// Debug middleware for deposit endpoint
+router.use('/deposit', (req, res, next) => {
+  console.log('[DepositRoute] Incoming request:', {
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+  })
+  next()
+})
+
 router.use(extractWalletAddress)
 
 router.get('/', getMyActivityHistory)

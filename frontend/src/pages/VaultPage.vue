@@ -579,8 +579,8 @@ export default defineComponent({
 
         // Auto-withdrawal is handled server-side — just pass the flag to vaultStorage
 
-        // ✅ Start rapid deposit confirmation polling (professional UX)
-        this.startDepositConfirmationPolling()
+        // ✅ SSE-Only: Tell backend to watch for deposit (no polling)
+        this.startDepositConfirmationWatch()
 
         // Redirect to My Vaults after successful creation
         this.$q.notify({
@@ -641,89 +641,34 @@ export default defineComponent({
     },
 
     /**
-     * ✅ Rapid polling after deposit to detect confirmation quickly (professional UX)
-     * Polls every 3 seconds for up to 60 seconds until balance increases
+     * ✅ SSE-Only: Tell backend to watch for deposit
+     * Backend will emit SSE when deposit is detected
      */
-    startDepositConfirmationPolling() {
-      // Stop any existing polling
-      this.stopBalancePolling()
-
-      const startTime = Date.now()
-      const initialBalance = this.vault?.balance || 0
-      const maxDuration = 60000 // 60 seconds max
-      const pollInterval = 3000 // 3 seconds between checks
-
-      console.log('🔍 Starting deposit confirmation polling...', {
-        initialBalance,
-        contractAddress: this.vault?.contractAddress,
-      })
-
-      const checkBalance = async () => {
-        const elapsed = Date.now() - startTime
-
-        // Stop after max duration
-        if (elapsed >= maxDuration) {
-          console.log('⏱️ Deposit confirmation polling timed out, switching to normal polling')
-          this.startBalancePolling()
-          return
-        }
-
-        // Stop if vault changed
-        if (!this.vault || !this.vault.contractAddress) {
-          return
-        }
-
-        try {
-          const balance = await getAddressBalance(this.vault.contractAddress)
-          const numeric = Number(balance)
-
-          // Check if balance increased (deposit confirmed!)
-          if (numeric > initialBalance) {
-            const depositAmount = numeric - initialBalance
-            console.log('✅ Deposit confirmed!', {
-              initialBalance,
-              currentBalance: numeric,
-              depositAmount,
-              elapsed: `${elapsed}ms`,
-            })
-
-            // Update the UI immediately
-            this.vault.balance = numeric
-
-            // Log deposit activity
-            this.logDepositActivity(depositAmount)
-
-            // Switch back to normal polling
-            this.startBalancePolling()
-            return
-          }
-
-          // Balance hasn't changed yet, continue polling
-          console.log(`⏳ Deposit not yet confirmed... (${elapsed}ms elapsed, balance: ${numeric})`)
-          setTimeout(checkBalance, pollInterval)
-        } catch (error) {
-          console.warn('Balance check failed during deposit confirmation:', error)
-          setTimeout(checkBalance, pollInterval)
-        }
-      }
-
-      // Start first check after 1 second, then every 3 seconds
-      setTimeout(checkBalance, 1000)
-    },
-
-    async logDepositActivity(amountSatoshis) {
+    async startDepositConfirmationWatch() {
       try {
         const { activityLogApi } = await import('src/services/activity-log-api.js')
-        await activityLogApi.logDeposit({
+
+        await activityLogApi.watchDeposit({
           vaultId: this.vault._id,
           vaultName: this.vault.name || 'Unnamed Vault',
           contractAddress: this.vault.contractAddress,
-          amountSatoshis: Number(amountSatoshis),
-          txHash: null,
+          expectedAmount: null, // Any amount accepted
         })
-        console.log('✅ Deposit activity logged:', amountSatoshis, 'satoshis')
-      } catch (logError) {
-        console.warn('⚠️ Failed to log deposit activity:', logError)
+
+        console.log('👁️ Backend watching for deposit to:', this.vault.contractAddress)
+        this.$q.notify({
+          type: 'info',
+          message: 'Waiting for deposit... You will be notified when confirmed.',
+          timeout: 5000,
+        })
+      } catch (error) {
+        console.error('Failed to start deposit watch:', error)
+        // Fallback to simple notification - SSE may still work from other page
+        this.$q.notify({
+          type: 'info',
+          message: 'Send funds to the vault address. This page will update automatically.',
+          timeout: 10000,
+        })
       }
     },
 

@@ -93,9 +93,19 @@ export const logWithdrawalActivity = async (req, res) => {
 export const logDepositActivity = async (req, res) => {
   try {
     const walletAddress = req.walletAddress
-    const { vaultId, vaultName, contractAddress, amountSatoshis, txHash } = req.body
+    const { vaultId, vaultName, contractAddress, amountSatoshis, txHash, newBalance } = req.body
+
+    console.log('[DepositLog] Received request:', {
+      walletAddress,
+      vaultId,
+      vaultName,
+      contractAddress,
+      amountSatoshis,
+      newBalance,
+    })
 
     if (!walletAddress) {
+      console.log('[DepositLog] ❌ Missing wallet address')
       return res.status(400).json({ message: 'Wallet address required' })
     }
 
@@ -108,17 +118,20 @@ export const logDepositActivity = async (req, res) => {
       details: {
         amountSatoshis,
         amountBCH: amountSatoshis ? amountSatoshis / 100000000 : null,
+        newBalance,
         txHash,
       },
     })
 
     if (!log) {
+      console.log('[DepositLog] ❌ logActivity returned null')
       return res.status(500).json({ success: false, message: 'Failed to log activity' })
     }
 
+    console.log('[DepositLog] ✅ Success:', log._id)
     res.status(200).json({ success: true, log })
   } catch (error) {
-    console.error('Log deposit activity error:', error.message, error.errors || '')
+    console.error('[DepositLog] ❌ Error:', error.message, error.stack || '')
     res.status(500).json({ success: false, message: 'Failed to log deposit', error: error.message })
   }
 }

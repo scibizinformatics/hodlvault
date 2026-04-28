@@ -28,6 +28,7 @@ const activityLogSchema = new mongoose.Schema({
   details: {
     amountSatoshis: Number,
     amountBCH: Number,
+    newBalance: Number,
     priceTargetCents: Number,
     currentPriceCents: Number,
     txHash: String,

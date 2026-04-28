@@ -17,6 +17,7 @@ import { dirname, join } from 'path'
 import { Vault } from '../models/vault.model.js'
 import { fetchOraclePrice } from './oracle.service.js'
 import { logActivity } from './activity-log.service.js'
+import { sendEvent } from './sse.service.js'
 
 // Load contract artifact using fs (Node.js 20 compatible)
 const __filename = fileURLToPath(import.meta.url)
@@ -221,6 +222,37 @@ export async function checkAndWithdraw() {
         } catch (logError) {
           console.warn('[AutoWithdraw] Failed to log activity:', logError.message)
         }
+
+        // Auto-delete vault after successful withdrawal (same as manual withdrawal)
+        try {
+          await logActivity({
+            walletAddress: vault.walletAddress,
+            activityType: 'VAULT_DELETED',
+            vaultId: vault._id,
+            vaultName: vault.name || 'Unnamed Vault',
+            contractAddress: vault.contractAddress,
+            details: {
+              reason: 'Auto-deleted after successful withdrawal',
+              autoWithdrawal: true,
+            },
+          })
+          await Vault.findByIdAndDelete(vault._id)
+          console.log(
+            `[AutoWithdraw] ✅ Vault ${vault.contractAddress} auto-deleted after withdrawal`,
+          )
+        } catch (deleteError) {
+          console.warn('[AutoWithdraw] Failed to auto-delete vault:', deleteError.message)
+        }
+
+        // Notify client in real-time via SSE
+        sendEvent(vault.walletAddress, {
+          type: 'VAULT_WITHDRAWN',
+          vaultId: vault._id,
+          contractAddress: vault.contractAddress,
+          amountSatoshis: result.amountSatoshis,
+          txHash: result.txid,
+          timestamp: new Date().toISOString(),
+        })
 
         withdrawn++
       } else {

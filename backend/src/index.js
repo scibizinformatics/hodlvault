@@ -2,6 +2,7 @@ import dotenv from 'dotenv'
 import connectDB from './config/database.js'
 import app from './app.js'
 import { startAutoWithdrawalCron } from './services/auto-withdrawal-cron.js'
+import { startDepositWatcherCron } from './services/deposit-watcher-cron.js'
 
 dotenv.config({
   path: '../.env',
@@ -22,6 +23,13 @@ const startServer = async () => {
     startAutoWithdrawalCron()
   } catch (err) {
     console.warn('⚠️ Auto-withdrawal cron failed to start:', err.message)
+  }
+
+  // Start deposit watcher cron (monitors for incoming deposits every 5s)
+  try {
+    startDepositWatcherCron()
+  } catch (err) {
+    console.warn('⚠️ Deposit watcher cron failed to start:', err.message)
   }
 
   app.on('error', (error) => {

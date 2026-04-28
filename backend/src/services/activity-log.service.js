@@ -1,4 +1,5 @@
 import { ActivityLog } from '../models/activity-log.model.js'
+import { sendEvent } from './sse.service.js'
 
 export async function logActivity(data) {
   try {
@@ -24,6 +25,15 @@ export async function logActivity(data) {
           timestamp: { $gte: tenSecondsAgo },
         })
       }
+      // For vault deletions: check for recent duplicate within 10 seconds
+      else if (data.activityType === 'VAULT_DELETED') {
+        const tenSecondsAgo = new Date(Date.now() - 10000)
+        existingLog = await ActivityLog.findOne({
+          vaultId: data.vaultId,
+          activityType: 'VAULT_DELETED',
+          timestamp: { $gte: tenSecondsAgo },
+        })
+      }
 
       if (existingLog) {
         console.log(
@@ -46,9 +56,36 @@ export async function logActivity(data) {
 
     await log.save()
     console.log(`✅ Activity logged: ${data.activityType} for ${data.walletAddress}`)
+
+    // Emit real-time event to connected clients
+    sendEvent(data.walletAddress, {
+      type: 'NEW_ACTIVITY',
+      activity: {
+        _id: log._id,
+        activityType: data.activityType,
+        vaultId: data.vaultId,
+        vaultName: data.vaultName,
+        contractAddress: data.contractAddress,
+        details: data.details,
+        timestamp: log.timestamp,
+      },
+    })
+
+    // Emit specific deposit confirmation event
+    if (data.activityType === 'DEPOSIT') {
+      sendEvent(data.walletAddress, {
+        type: 'DEPOSIT_CONFIRMED',
+        vaultId: data.vaultId,
+        contractAddress: data.contractAddress,
+        amountSatoshis: data.details?.amountSatoshis,
+        newBalance: data.details?.newBalance,
+        timestamp: log.timestamp,
+      })
+    }
+
     return log
   } catch (error) {
-    console.error('❌ Failed to log activity:', error)
+    console.error('❌ Failed to log activity:', error.message, error.errors || error.stack || '')
     return null
   }
 }

@@ -317,6 +317,7 @@ import { initializeHodlVaultContract, getAddressBalance } from 'src/services/blo
 import { paytacaOptimizedWithdrawal } from 'src/services/paytaca-optimized-withdrawal'
 import { fetchOraclePrice } from 'src/services/oracle'
 import { vaultStorage } from 'src/services/vault-storage'
+import { connectSSE, disconnectSSE } from 'src/services/sse.service'
 
 export default defineComponent({
   name: 'VaultManagePage',
@@ -377,14 +378,94 @@ export default defineComponent({
   mounted() {
     this.loadSelectedVault()
     this.refreshPrice()
+
+    // ✅ Connect to real-time SSE updates
+    connectSSE()
+
+    // Listen for vault withdrawal events (in case this vault is auto-withdrawn)
+    window.addEventListener('vault-withdrawn', this.handleVaultWithdrawn)
+
+    // Listen for deposit confirmation events (real-time balance updates)
+    window.addEventListener('deposit-confirmed', this.handleDepositConfirmed)
   },
 
   beforeUnmount() {
+    // Stop any active watching
+    this.stopDepositWatch()
     this.stopBalancePolling()
-    this.stopDepositConfirmationPolling()
+
+    // ✅ Disconnect SSE and remove event listeners
+    disconnectSSE()
+    window.removeEventListener('vault-withdrawn', this.handleVaultWithdrawn)
+    window.removeEventListener('deposit-confirmed', this.handleDepositConfirmed)
   },
 
   methods: {
+    /**
+     * Handle real-time vault withdrawal event from SSE
+     */
+    handleVaultWithdrawn(event) {
+      const { vaultId, contractAddress, amountSatoshis } = event.detail
+      console.log('[SSE] Vault withdrawn in real-time:', {
+        vaultId,
+        contractAddress,
+        amountSatoshis,
+      })
+
+      // Check if this is the current vault being viewed
+      if (this.vault && this.vault.contractAddress === contractAddress) {
+        // Update vault status immediately
+        this.vault.status = 'withdrawn'
+        this.vault.balance = 0
+
+        // Show notification
+        this.$q.notify({
+          type: 'positive',
+          message: `Auto-withdrawal complete! ${(amountSatoshis / 100000000).toFixed(8)} BCH returned to your wallet`,
+          timeout: 8000,
+        })
+
+        // Redirect to My Vaults after a delay
+        setTimeout(() => {
+          this.$router.push('/my-vaults')
+        }, 3000)
+      }
+    },
+
+    /**
+     * Handle real-time deposit confirmation event from SSE
+     */
+    handleDepositConfirmed(event) {
+      const { vaultId, contractAddress, amountSatoshis, newBalance } = event.detail
+      console.log('[SSE] Deposit confirmed in real-time:', {
+        vaultId,
+        contractAddress,
+        amountSatoshis,
+        newBalance,
+      })
+
+      // Check if this is the current vault being viewed
+      if (this.vault && this.vault.contractAddress === contractAddress) {
+        // Update balance
+        if (newBalance !== undefined && newBalance !== null) {
+          this.vault.balance = newBalance
+        }
+
+        // Hide QR code
+        this.showQRCode = false
+
+        // Notify user
+        this.$q.notify({
+          type: 'positive',
+          message: `Deposit confirmed! +${amountSatoshis} satoshis`,
+          icon: 'check_circle',
+          timeout: 5000,
+        })
+
+        console.log('[SSE] Balance updated to:', this.vault.balance)
+      }
+    },
+
     async loadSelectedVault() {
       try {
         // Get selected vault from localStorage
@@ -456,11 +537,8 @@ export default defineComponent({
           oraclePkHex: vaultData.oraclePkHex,
           contract,
           originalFundingAddress: vaultData.originalFundingAddress,
-          autoWithdrawal: !!vaultData.autoWithdrawal, // ✅ Auto-withdrawal flag from backend
+          autoWithdrawal: !!vaultData.autoWithdrawal, // Auto-withdrawal flag from backend
         }
-
-        this.refreshVaultBalance()
-        this.startBalancePolling()
 
         console.log('Selected vault loaded:', vaultData.contractAddress)
       } catch (error) {
@@ -521,14 +599,6 @@ export default defineComponent({
       }
     },
 
-    startBalancePolling() {
-      this.stopBalancePolling()
-      this.balanceInterval = setInterval(() => {
-        // Silent refresh - no loading indicators
-        this.refreshVaultBalanceSilent()
-      }, 30000) // Poll every 30 seconds
-    },
-
     async refreshVaultBalanceSilent() {
       if (!this.vault?.contractAddress) return
 
@@ -539,8 +609,18 @@ export default defineComponent({
         // Only update if changed to avoid unnecessary re-renders
         if (this.vault.balance !== balance) {
           this.vault.balance = balance
-          vaultStorage.updateVaultBalance(this.vault.contractAddress, balance)
-          console.log('Balance updated silently:', balance)
+          try {
+            await vaultStorage.updateVaultBalance(this.vault.contractAddress, balance)
+            console.log('Balance updated silently:', balance)
+          } catch (storageError) {
+            // If vault not found (404), it was likely auto-deleted - stop polling
+            if (storageError.response?.status === 404) {
+              console.log(
+                '[VaultManage] Vault not found (404) - stopping polling (likely auto-deleted)',
+              )
+              this.stopBalancePolling()
+            }
+          }
         }
       } catch (error) {
         // Silently fail - don't show error to user
@@ -556,117 +636,63 @@ export default defineComponent({
     },
 
     /**
-     * Toggle QR code visibility and start/stop rapid polling accordingly
-     * Efficient UX: Only poll when user intends to deposit (QR is visible)
+     * Toggle QR code display
+     * ✅ SSE-Only: Tell backend to watch/unwatch for deposits
      */
-    toggleQRCode() {
+    async toggleQRCode() {
       this.showQRCode = !this.showQRCode
 
       if (this.showQRCode) {
-        // User wants to deposit - start rapid polling
-        console.log(' QR code shown - starting rapid deposit detection polling')
-        this.startDepositConfirmationPolling()
+        // User wants to deposit - tell backend to watch
+        console.log('👁️ QR code shown - telling backend to watch for deposit')
+        await this.startDepositWatch()
       } else {
-        // User closed QR - stop rapid polling to save resources
-        console.log(' QR code hidden - stopping rapid polling')
-        this.stopDepositConfirmationPolling()
-        // Resume normal slow polling
-        this.startBalancePolling()
+        // User closed QR - tell backend to stop watching
+        console.log('🛑 QR code hidden - stopping backend watch')
+        await this.stopDepositWatch()
       }
     },
 
     /**
-     * Rapid polling after deposit to detect confirmation quickly (professional UX)
-     * Polls every 3 seconds for up to 60 seconds until balance increases
+     * ✅ SSE-Only: Tell backend to watch for deposit
      */
-    startDepositConfirmationPolling() {
-      // Stop any existing polling
-      this.stopBalancePolling()
-      this.stopDepositConfirmationPolling()
+    async startDepositWatch() {
+      try {
+        const { activityLogApi } = await import('src/services/activity-log-api.js')
 
-      const startTime = Date.now()
-      const initialBalance = this.vault?.balance || 0
-      const maxDuration = 60000 // 60 seconds max
-      const pollInterval = 3000 // 3 seconds between checks
+        await activityLogApi.watchDeposit({
+          vaultId: this.vault._id,
+          vaultName: this.vault.name || 'Unnamed Vault',
+          contractAddress: this.vault.contractAddress,
+          expectedAmount: null,
+        })
 
-      console.log(' Starting deposit confirmation polling...', {
-        initialBalance,
-        contractAddress: this.vault?.contractAddress,
-      })
-
-      const checkBalance = async () => {
-        // Stop if QR was hidden
-        if (!this.showQRCode) {
-          console.log(' Rapid polling stopped (QR hidden)')
-          return
-        }
-
-        const elapsed = Date.now() - startTime
-
-        // Stop after max duration
-        if (elapsed >= maxDuration) {
-          console.log(' Deposit confirmation polling timed out, switching to normal polling')
-          this.startBalancePolling()
-          return
-        }
-
-        try {
-          const { getAddressBalance } = await import('src/services/blockchain')
-          const currentBalance = Number(await getAddressBalance(this.vault.contractAddress))
-
-          // Check if balance increased (deposit confirmed!)
-          if (currentBalance > initialBalance) {
-            const depositAmount = currentBalance - initialBalance
-            console.log(' Deposit confirmed!', {
-              initialBalance,
-              currentBalance,
-              depositAmount,
-              elapsed: `${elapsed}ms`,
-            })
-
-            // Update the UI immediately
-            this.vault.balance = currentBalance
-            vaultStorage.updateVaultBalance(this.vault.contractAddress, currentBalance)
-
-            // Notify user
-            this.$q.notify({
-              type: 'positive',
-              message: `Deposit confirmed! +${depositAmount} satoshis`,
-              icon: 'check_circle',
-              timeout: 5000,
-            })
-
-            // Hide QR code after successful deposit
-            this.showQRCode = false
-
-            // Switch back to normal polling
-            this.startBalancePolling()
-            return
-          }
-
-          // Balance hasn't changed yet, continue polling
-          console.log(
-            ` Deposit not yet confirmed... (${elapsed}ms elapsed, balance: ${currentBalance})`,
-          )
-          this.depositPollTimeout = setTimeout(checkBalance, pollInterval)
-        } catch (error) {
-          console.warn('Balance check failed during deposit confirmation:', error)
-          this.depositPollTimeout = setTimeout(checkBalance, pollInterval)
-        }
+        console.log('👁️ Backend watching for deposit to:', this.vault.contractAddress)
+        this.$q.notify({
+          type: 'info',
+          message: 'Send funds to the address above. You will be notified when confirmed.',
+          timeout: 5000,
+        })
+      } catch (error) {
+        console.error('Failed to start deposit watch:', error)
+        this.$q.notify({
+          type: 'info',
+          message: 'Send funds to the vault address. This page will update automatically.',
+          timeout: 10000,
+        })
       }
-
-      // Start first check immediately, then every 3 seconds
-      this.depositPollTimeout = setTimeout(checkBalance, 1000)
     },
 
     /**
-     * Stop rapid deposit confirmation polling
+     * ✅ SSE-Only: Tell backend to stop watching
      */
-    stopDepositConfirmationPolling() {
-      if (this.depositPollTimeout) {
-        clearTimeout(this.depositPollTimeout)
-        this.depositPollTimeout = null
-        console.log(' Rapid deposit polling stopped')
+    async stopDepositWatch() {
+      try {
+        const { activityLogApi } = await import('src/services/activity-log-api.js')
+        await activityLogApi.stopWatchingDeposit(this.vault.contractAddress)
+        console.log('🛑 Stopped watching for deposit to:', this.vault.contractAddress)
+      } catch (error) {
+        console.warn('Failed to stop deposit watch:', error.message)
       }
     },
 

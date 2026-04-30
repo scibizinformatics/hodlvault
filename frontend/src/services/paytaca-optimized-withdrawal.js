@@ -54,10 +54,14 @@ export async function paytacaOptimizedWithdrawal(
 
     console.log('Built transaction hex:', txHex)
 
+    // Extract txHash from CashScript response (could be string or object)
+    const txHash = txHex.txid || txHex
+
     // ✅ Return success with transaction details
     return {
       success: true,
       txHex,
+      txHash,
       amountSatoshis: Number(amount),
     }
   } catch (error) {

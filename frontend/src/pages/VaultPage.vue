@@ -108,7 +108,7 @@
                 <!-- Target Price Input -->
                 <div class="q-mb-lg">
                   <label class="text-subtitle2 text-weight-medium text-grey-4 q-mb-sm block">
-                    Target Price (USD)
+                    Target Price (PHP)
                   </label>
                   <q-input
                     v-model.number="form.priceTarget"
@@ -124,13 +124,13 @@
                     :rules="[(val) => val > 0 || 'Price target must be greater than 0']"
                     :hint="
                       currentBchPrice
-                        ? `Current BCH Price: $${currentBchPrice}`
+                        ? `Current BCH Price: ₱${currentBchPrice}`
                         : 'Fetching current price...'
                     "
                     persistent-hint
                   >
                     <template v-slot:prepend>
-                      <q-icon name="attach_money" color="primary" />
+                      <span class="text-primary text-h6">₱</span>
                     </template>
                     <template v-slot:append>
                       <q-spinner v-if="priceLoading" size="sm" color="primary" />
@@ -460,7 +460,7 @@ export default defineComponent({
         this.oracleSuccess = true
         this.$q.notify({
           type: 'positive',
-          message: `Oracle price: $${result.price}`,
+          message: `Oracle price: ₱${result.price}`,
           icon: 'check_circle',
         })
       } catch (err) {
@@ -506,7 +506,7 @@ export default defineComponent({
         if (existingVault) {
           this.$q.notify({
             type: 'warning',
-            message: `You already have a vault with target price $${this.form.priceTarget}. Each vault must have a unique target price.`,
+            message: `You already have a vault with target price ₱${this.form.priceTarget}. Each vault must have a unique target price.`,
             timeout: 5000,
           })
           return

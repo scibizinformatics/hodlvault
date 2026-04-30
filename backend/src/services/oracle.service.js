@@ -4,7 +4,7 @@
  * Caches results to avoid rate limiting.
  */
 
-export const ORACLE_PUBKEY = '02d09db08af1ff4e8453919cc866a4be427d7bfe18f2c05e5444c196fcf6fd2818'
+export const ORACLE_PUBKEY = '02891f242b141f43f0c983ad00a1bebb3578f092d7c7051c5b4415cf80ff609f90' // PHP/BCH Oracle
 
 const ORACLE_API_URL = 'https://oracles.generalprotocols.com/api/v1/oracles'
 const CACHE_TTL_MS = 60 * 1000 // Cache for 60 seconds
@@ -42,25 +42,24 @@ export async function fetchOraclePrice() {
 
     const oraclesData = await oraclesResponse.json()
 
-    // Find the USD/BCH oracle
-    const usdBchOracle = oraclesData.oracles.find(
-      (oracle) => oracle.publicKey === ORACLE_PUBKEY,
-    )
+    // Find the PHP/BCH oracle
+    const phpBchOracle = oraclesData.oracles.find((oracle) => oracle.publicKey === ORACLE_PUBKEY)
 
-    if (!usdBchOracle || !usdBchOracle.messageMetrics) {
-      throw new Error('USD/BCH oracle not found or has no message metrics')
+    if (!phpBchOracle || !phpBchOracle.messageMetrics) {
+      throw new Error('PHP/BCH oracle not found or has no message metrics')
     }
 
-    const currentPriceInCents = usdBchOracle.messageMetrics.currentPrice
+    const currentPrice = phpBchOracle.messageMetrics.currentPrice
 
-    if (!currentPriceInCents) {
+    if (!currentPrice) {
       throw new Error('No current price available from oracle metrics')
     }
 
-    // Validate the price seems reasonable
-    const priceInUSD = currentPriceInCents / 100
-    if (priceInUSD < 50 || priceInUSD > 10000) {
-      throw new Error(`Oracle price out of reasonable range: $${priceInUSD}`)
+    // PHP oracle returns price in whole pesos (not cents like USD oracle)
+    // Example: 27356 means ₱27,356 per BCH
+    const priceInPHP = currentPrice
+    if (priceInPHP < 1000 || priceInPHP > 1000000) {
+      throw new Error(`Oracle price out of reasonable range: ₱${priceInPHP}`)
     }
 
     // Step 2: Get the latest oracle message + signature
@@ -88,10 +87,10 @@ export async function fetchOraclePrice() {
     }
 
     const result = {
-      priceInCents: currentPriceInCents,
+      priceInCents: Math.round(priceInPHP * 100), // Convert to cents for contract compatibility
       messageHex: oracleMessage.message,
       signatureHex: oracleMessage.signature,
-      timestamp: usdBchOracle.messageMetrics.maxMessageTimestamp,
+      timestamp: phpBchOracle.messageMetrics.maxMessageTimestamp,
     }
 
     // Update cache
@@ -99,7 +98,7 @@ export async function fetchOraclePrice() {
     cachedAt = now
 
     console.log(
-      `[Oracle] Price: $${priceInUSD.toFixed(2)} (${currentPriceInCents} cents), cached for ${CACHE_TTL_MS / 1000}s`,
+      `[Oracle] Price: ₱${priceInPHP.toFixed(2)} (whole pesos), cached for ${CACHE_TTL_MS / 1000}s`,
     )
 
     return result

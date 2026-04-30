@@ -3,17 +3,17 @@
  * Using the official General Protocols Oracle API
  */
 
-export const ORACLE_PUBKEY = '02d09db08af1ff4e8453919cc866a4be427d7bfe18f2c05e5444c196fcf6fd2818' // USD/BCH Oracle
+export const ORACLE_PUBKEY = '02891f242b141f43f0c983ad00a1bebb3578f092d7c7051c5b4415cf80ff609f90' // PHP/BCH Oracle
 
 export async function fetchOraclePrice() {
   const ORACLE_API_URL = 'https://oracles.generalprotocols.com/api/v1/oracles'
 
   try {
-    // First, get the latest oracle data to find the USD/BCH oracle
+    // First, get the latest oracle data to find the PHP/BCH oracle
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-    // Get oracle list to find USD/BCH oracle
+    // Get oracle list to find PHP/BCH oracle
     const oraclesResponse = await fetch(ORACLE_API_URL, {
       method: 'GET',
       headers: {
@@ -29,27 +29,28 @@ export async function fetchOraclePrice() {
 
     const oraclesData = await oraclesResponse.json()
 
-    // Find the USD/BCH oracle
-    const usdBchOracle = oraclesData.oracles.find((oracle) => oracle.publicKey === ORACLE_PUBKEY)
+    // Find the PHP/BCH oracle
+    const phpBchOracle = oraclesData.oracles.find((oracle) => oracle.publicKey === ORACLE_PUBKEY)
 
-    if (!usdBchOracle || !usdBchOracle.messageMetrics) {
-      throw new Error('USD/BCH oracle not found or has no message metrics')
+    if (!phpBchOracle || !phpBchOracle.messageMetrics) {
+      throw new Error('PHP/BCH oracle not found or has no message metrics')
     }
 
     // Get the current price from the oracle metrics
-    const currentPriceInCents = usdBchOracle.messageMetrics.currentPrice
-    const currentTimestamp = usdBchOracle.messageMetrics.maxMessageTimestamp
+    const currentPrice = phpBchOracle.messageMetrics.currentPrice
+    const currentTimestamp = phpBchOracle.messageMetrics.maxMessageTimestamp
 
-    if (!currentPriceInCents) {
+    if (!currentPrice) {
       throw new Error('No current price available from oracle metrics')
     }
 
-    // Convert cents to USD
-    const priceInUSD = currentPriceInCents / 100
+    // PHP oracle returns price in whole pesos (not cents like USD oracle)
+    // Example: 27356 means ₱27,356 per BCH
+    const priceInPHP = currentPrice
 
-    // Validate the price seems reasonable
-    if (priceInUSD < 50 || priceInUSD > 10000) {
-      console.warn(`Oracle price seems unusual: $${priceInUSD}, using fallback`)
+    // Validate the price seems reasonable (PHP/BCH typically ₱10,000-₱100,000)
+    if (priceInPHP < 1000 || priceInPHP > 1000000) {
+      console.warn(`Oracle price seems unusual: ₱${priceInPHP}, using fallback`)
       throw new Error('Oracle price out of reasonable range')
     }
 
@@ -57,7 +58,7 @@ export async function fetchOraclePrice() {
     // Format: [timestamp][price_in_cents][asset_code]
     // Convert to Little-Endian format (reverse hex string)
 
-    // Add asset code for USD (empty for now, as we're focusing on the price)
+    // Add asset code for PHP (empty for now, as we're focusing on the price)
 
     clearTimeout(timeoutId)
 
@@ -72,7 +73,7 @@ export async function fetchOraclePrice() {
     console.log('Fetched latest oracle message:', oracleMessage)
 
     return {
-      price: priceInUSD,
+      price: priceInPHP,
       message_hex: oracleMessage.message,
       signature_hex: oracleMessage.signature,
       oracle_pubkey_hex: ORACLE_PUBKEY,

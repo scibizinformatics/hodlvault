@@ -134,14 +134,14 @@
                       <div class="col-auto">
                         <div class="text-grey-5">Target Price</div>
                         <div class="text-white text-weight-medium">
-                          ${{ vault.priceTarget.toFixed(2) }}
+                          ₱{{ vault.priceTarget.toFixed(2) }}
                         </div>
                       </div>
 
                       <div class="col-auto">
                         <div class="text-grey-5">Current Price</div>
                         <div class="text-white text-weight-medium">
-                          ${{ currentBchPrice ? currentBchPrice.toFixed(2) : 'Loading...' }}
+                          ₱{{ currentBchPrice ? currentBchPrice.toFixed(2) : 'Loading...' }}
                         </div>
                       </div>
                     </div>

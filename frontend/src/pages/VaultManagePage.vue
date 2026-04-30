@@ -177,7 +177,7 @@
                       Target Price
                     </label>
                     <q-input
-                      :model-value="`$${vault.priceTarget.toFixed(2)}`"
+                      :model-value="`₱${vault.priceTarget.toFixed(2)}`"
                       readonly
                       outlined
                       dark
@@ -189,7 +189,7 @@
                     </label>
                     <q-input
                       :model-value="
-                        currentBchPrice != null ? `$${Number(currentBchPrice).toFixed(2)}` : '—'
+                        currentBchPrice != null ? `₱${Number(currentBchPrice).toFixed(2)}` : '—'
                       "
                       readonly
                       outlined
@@ -225,8 +225,8 @@
                         <span
                           v-else-if="currentBchPrice && Number(currentBchPrice) < vault.priceTarget"
                         >
-                          Current BCH price (${{ Number(currentBchPrice).toFixed(2) }}) is below
-                          your target (${{ vault.priceTarget.toFixed(2) }})
+                          Current BCH price (₱{{ Number(currentBchPrice).toFixed(2) }}) is below
+                          your target (₱{{ vault.priceTarget.toFixed(2) }})
                         </span>
                       </q-tooltip>
                     </q-btn>
@@ -245,7 +245,7 @@
                       <div class="text-body2">
                         <span v-if="canWithdraw">
                           <strong>Withdrawal Available</strong><br />
-                          Target price of ${{ vault.priceTarget.toFixed(2) }} has been reached!
+                          Target price of ₱{{ vault.priceTarget.toFixed(2) }} has been reached!
                         </span>
                         <span v-else>
                           <strong>Withdrawal Locked</strong><br />
@@ -257,8 +257,8 @@
                               currentBchPrice && Number(currentBchPrice) < vault.priceTarget
                             "
                           >
-                            Waiting for BCH to reach ${{ vault.priceTarget.toFixed(2) }} (currently
-                            ${{ Number(currentBchPrice).toFixed(2) }})
+                            Waiting for BCH to reach ₱{{ vault.priceTarget.toFixed(2) }} (currently
+                            ₱{{ Number(currentBchPrice).toFixed(2) }})
                           </span>
                         </span>
                       </div>
@@ -567,7 +567,7 @@ export default defineComponent({
         this.oracleSuccess = true
         this.$q.notify({
           type: 'positive',
-          message: `Oracle price: $${result.price}`,
+          message: `Oracle price: ₱${result.price}`,
           icon: 'check_circle',
         })
       } catch (err) {
